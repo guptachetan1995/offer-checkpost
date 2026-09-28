@@ -12,6 +12,19 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "blocked_connection: provokes a connection the socket guard refuses"
     )
+    config.addinivalue_line(
+        "markers",
+        "loopback: talks to the app's own server on 127.0.0.1; every other address stays refused",
+    )
+    # Here rather than in pyproject.toml: verify.sh reinstalls the virtualenv whenever
+    # pyproject.toml changes, and a marker is no reason to.
+    config.addinivalue_line(
+        "markers",
+        "e2e: drives the page in Google Chrome through Playwright; skips when either is missing",
+    )
+
+
+LOOPBACK = "127.0.0.1"
 
 
 @pytest.fixture(autouse=True)
@@ -21,20 +34,38 @@ def no_network(request, monkeypatch):
     the refusal as an ordinary connection error.
 
     A test that provokes a connection error on purpose is marked ``blocked_connection`` and
-    asserts the attempts itself. A test marked ``live`` talks to SerpApi and is left alone."""
+    asserts the attempts itself. A test marked ``loopback`` may also reach 127.0.0.1, where it
+    runs the app's own server. A test marked ``live`` talks to SerpApi and is left alone."""
     if request.node.get_closest_marker("live"):
         yield []
         return
+    loopback = request.node.get_closest_marker("loopback") is not None
     attempts = []
 
-    def refuse(*args, **kwargs):
+    def allowed(address):
+        # A host name, or an address whose first item is the host.
+        return loopback and (address[0] if isinstance(address, tuple) else address) == LOOPBACK
+
+    def refuse(args):
         attempts.append(args)
         raise OSError("network access is blocked in this test")
 
+    def guard(real):
+        def call(address, *rest, **kwargs):
+            return real(address, *rest, **kwargs) if allowed(address) else refuse((address, *rest))
+
+        return call
+
+    def guard_method(real):
+        def call(self, address, *rest):
+            return real(self, address, *rest) if allowed(address) else refuse((address, *rest))
+
+        return call
+
     for name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "create_connection"):
-        monkeypatch.setattr(socket, name, refuse)
-    monkeypatch.setattr(socket.socket, "connect", lambda self, *a: refuse(*a))
-    monkeypatch.setattr(socket.socket, "connect_ex", lambda self, *a: refuse(*a))
+        monkeypatch.setattr(socket, name, guard(getattr(socket, name)))
+    for name in ("connect", "connect_ex"):
+        monkeypatch.setattr(socket.socket, name, guard_method(getattr(socket.socket, name)))
     yield attempts
     if attempts and not request.node.get_closest_marker("blocked_connection"):
         pytest.fail(f"the test tried to reach the network: {attempts[0]!r}", pytrace=False)

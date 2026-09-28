@@ -10,6 +10,10 @@ for a reader who can't see the screen, and each one says what the tool does not 
 
 A handler takes the ``Call`` (the store, who is calling, and whether the planner made the call)
 and ``args`` already checked against its schema.
+
+A case whose verdict is on the Offer Board stays as it was published: nothing corrects its
+claims or runs a check on it until a person retracts the verdict (``changeable``). The post
+keeps its own snapshot all the same, so what students were sent never changes after the click.
 """
 
 from __future__ import annotations
@@ -90,6 +94,19 @@ STALE_WHEN_CORRECTED = {
 # ---- handlers that only touch the store ---------------------------------------------------
 
 
+def changeable(store: Store, case_id: str) -> dict[str, Any]:
+    """The case, for a call that would change its claims or its findings; refused while its
+    verdict is on the Offer Board."""
+    case = store.case(case_id)
+    if case["publishedVerdict"] is not None:
+        raise Refused(
+            f"{case_id}'s verdict is on the Offer Board, and the case stays as it was "
+            "published: a person retracts the verdict first, then the case can be corrected or "
+            "checked again"
+        )
+    return case
+
+
 def _open_case(call: Call, args: dict[str, Any]) -> dict[str, Any]:
     text = args["text"]
     return call.store.add_case(
@@ -115,7 +132,7 @@ def _claim_value(field: str, claim: dict[str, Any] | None) -> Any:
 
 
 def _update_claims(call: Call, args: dict[str, Any]) -> dict[str, Any]:
-    case = call.store.case(args["case_id"])
+    case = changeable(call.store, args["case_id"])
     fields = args.get("fields", {})
     confirm = args.get("confirm", False)
     if not fields and not confirm:
@@ -141,6 +158,7 @@ def _update_claims(call: Call, args: dict[str, Any]) -> dict[str, Any]:
             if claims[field] is not None:
                 claims[field]["confirmed"] = True
     if changed:
+        case["revision"] += 1
         call.store.refresh_fingerprint(case)
     return {"claims": claims, "corrected": changed, "staleSignals": staled}
 
@@ -181,7 +199,7 @@ def runner(store: Store, actor: str) -> planner.Runner:
 
 def _investigate(call: Call, args: dict[str, Any]) -> dict[str, Any]:
     store = call.store
-    case = store.case(args["case_id"])
+    case = changeable(store, args["case_id"])
     max_searches = args.get("max_searches", store.max_searches)
     if max_searches > store.max_searches:
         raise Refused(
@@ -200,7 +218,8 @@ def _investigate(call: Call, args: dict[str, Any]) -> dict[str, Any]:
         environ=store.planner_settings,
     )
     case["sameAs"] = earlier["id"] if earlier else None
-    # A case already on the board, or taken off it, keeps saying so.
+    case["revision"] += 1
+    # A case taken off the board keeps saying so.
     if case["status"] == "open":
         case["status"] = "investigated"
     return result
@@ -209,7 +228,7 @@ def _investigate(call: Call, args: dict[str, Any]) -> dict[str, Any]:
 def _search_check(tool: str) -> Handler:
     def handler(call: Call, args: dict[str, Any]) -> dict[str, Any]:
         store = call.store
-        case = store.case(args["case_id"])
+        case = changeable(store, args["case_id"])
         if call.by_planner:
             step = planner.run_check(case, tool, args, provider=store.provider, actor=call.actor)
         else:
@@ -221,6 +240,7 @@ def _search_check(tool: str) -> Handler:
                 actor=call.actor,
                 reserve=store.quota_reserve,
             )
+        case["revision"] += 1
         added = set(step["signalsAdded"])
         return {"step": step, "signals": [s for s in case["signals"] if s["id"] in added]}
 
@@ -242,10 +262,11 @@ def _draft(field: str, write: Callable[..., dict[str, Any]]) -> Handler:
 _CASE_ONLY = obj({"case_id": CASE_ID}, "case_id")
 
 _CHECK_LIMITS = (
-    " It does NOT run (it refuses, spending nothing) on claims not yet confirmed, past the "
-    "case's search budget or the monthly quota reserve, or, for the agent, once the evidence "
-    "is already decisive: only a person spends searches that can't change the band. Run again, "
-    "it replaces its earlier finding instead of adding a second one."
+    " It does NOT run (it refuses, spending nothing) on claims not yet confirmed, on a case "
+    "whose verdict is on the Offer Board, past the case's search budget or the monthly quota "
+    "reserve, or, for the agent, once the evidence is already decisive: only a person spends "
+    "searches that can't change the band. Run again, it replaces its earlier finding instead "
+    "of adding a second one."
 )
 
 _TOOLS = (
@@ -286,8 +307,9 @@ _TOOLS = (
         "claim the case has as confirmed, which investigate requires. Returns the claims, "
         "the corrected fields and the ids of the signals made stale. Does NOT delete, re-fire "
         "or re-score any signal (investigate again for fresh ones), change the recruiter's "
-        "contacts or links, or touch the drafts, the Offer Board or the case's status. A field "
-        "other than company, role, city, pay and fee is refused, and the refusal is logged.",
+        "contacts or links, or touch the drafts, the Offer Board or the case's status. It refuses "
+        "a case whose verdict is on the Offer Board (a person retracts it first), and a field "
+        "other than company, role, city, pay and fee; each refusal is logged.",
         obj(
             {
                 "case_id": CASE_ID,
@@ -455,7 +477,8 @@ _TOOLS = (
         "findings are set aside and the checks run again. Returns the "
         "band the evidence supports so far, the trace (each step with why it ran or was "
         "skipped), the signals, and the budget with the searches saved. Does NOT run on "
-        "unconfirmed claims (it refuses), spend more than max_searches (default and "
+        "unconfirmed claims or on a case whose verdict is on the Offer Board (it refuses), "
+        "spend more than max_searches (default and "
         "ceiling: the app's per-case budget, normally 6), search "
         "past a decisive result, fall back to made-up data when the quota guard trips, or "
         "draft, publish or close anything.",

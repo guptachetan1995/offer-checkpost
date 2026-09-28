@@ -37,7 +37,7 @@ record-fixtures:
 	@exit 1
 
 demo-record:
-	@echo "make demo-record: arrives in a later slice, with the web UI" >&2
+	@echo "make demo-record: arrives in a later slice, with the screen recorder" >&2
 	@exit 1
 
 # Rebuilds the hash locks in a throwaway venv, then deletes it. Run only when a pin in

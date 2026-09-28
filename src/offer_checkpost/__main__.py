@@ -1,6 +1,6 @@
 import sys
 
-from offer_checkpost.cli import main
+from offer_checkpost.cli import main, settings
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(environ=settings()))

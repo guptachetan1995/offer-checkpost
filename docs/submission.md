@@ -155,7 +155,7 @@ No community — I found it elsewhere
 
 | Checkbox | Answer |
 |---|---|
-| This project existed before the hackathon. | Unticked. It is a new project: planned on 28 September 2026 and coded 1–8 October 2026, all inside the hackathon period (1 September to 10 October 2026). |
+| This project existed before the hackathon. | Unticked. It is a new project: planned on 28 September 2026 and coded from 29 September 2026, all inside the hackathon period (1 September to 10 October 2026). |
 | I tested the repository and demo links in an incognito window and confirm that judges can open them without requesting access. | Ticked once both links have been opened in a private window. |
 | I have read and accept the Hackathon Rules. | Ticked at submission. |
 | I have read and accept the Terms & Conditions. | Ticked at submission. |

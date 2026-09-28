@@ -15,15 +15,17 @@ answer as a WhatsApp message or a shared page, and installs nothing.
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
-**Status: the investigator is built; the web app is next.** Offer-text extraction (the claims
-and the four text rules, in English and romanised Hinglish, with Indian money and `+91` phone
-formats), domain classification (registrable domains, free mail, look-alikes), listing-pay
-parsing, the SerpApi checks, the decision table, the planner, the drafts, and the one `invoke`
-path with the agent's tools and the human-only verbs are in place, with their tests and 21
-fictional sample offers in `samples/offers/`. `python -m offer_checkpost investigate <file>`
-runs an offer through all of it from the command line. The server and the UI land by
-8 October 2026, and this README then gives the full run commands, which will work from a fresh
-clone.
+**Status: the investigator and the local web app are built; the recorded SerpApi responses
+and the demo video are next.** Offer-text extraction (the claims and the four text rules, in
+English and romanised Hinglish, with Indian money and `+91` phone formats), domain
+classification (registrable domains, free mail, look-alikes), listing-pay parsing, the SerpApi
+checks, the decision table, the planner, the drafts, the one `invoke` path with the agent's
+tools and the human-only verbs, and the web app on `127.0.0.1` are in place, with their tests
+and 21 fictional sample offers in `samples/offers/`. `python -m offer_checkpost serve` runs the
+app ([Run it](#run-it)), and `python -m offer_checkpost investigate <file>` runs an offer
+through the same path from the command line. Until the recorded responses are in the
+repository, replay mode has nothing to serve: each search in it fails and says so, and
+`--provider fake` shows the whole flow on the three demo samples with synthetic data.
 
 ## The problem
 
@@ -44,7 +46,7 @@ different things:
 So Offer Checkpost never certifies an offer as genuine. Its best finding is "no
 contradictions found", and a verdict posted for others to read is always a person's decision.
 
-## How it works (planned)
+## How it works
 
 1. **Paste the message.** Offer Checkpost extracts the claims (company, role, city, pay, any
    fee, the recruiter's email, phone and links) and shows each one as a chip, highlighted where
@@ -75,6 +77,13 @@ contradictions found", and a verdict posted for others to read is always a perso
    cybercrime.gov.in if money has already gone, or, as a placement officer, publish a verdict
    to the **Offer Board**. The board is the officer's own published log on their machine. It
    reaches students as "Copy for WhatsApp" text or as a downloaded HTML page.
+
+   A post is the case exactly as the person read it: publishing is refused if anything changed
+   after they last looked (a correction, or a check the agent ran), and the post keeps its own
+   copy of the claims and evidence, so nothing done to the case afterwards rewrites what
+   students were sent. A case on the board can't be corrected or checked again until a person
+   retracts its verdict. The label can't say more than the checks found: "No contradictions
+   found" only for that band, and a red-flag label never for it.
 
 **Who "the agent" is:** the automated investigator (the planner), or any MCP client. No LLM
 runs inside the app.
@@ -131,7 +140,7 @@ cannot see the screen, and each one says what the tool does not do.
 | Tool | What it does | What it does not do |
 |---|---|---|
 | `open_case` | Stores the pasted message, extracts claims with their source spans, runs the text rules | Search anything or contact anyone |
-| `update_claims` | Corrects or confirms extracted claims, and flags the findings that depended on a corrected claim as stale (a new fee amount flags none: the rules read only whether a fee is asked) | Delete, re-fire or re-score findings; touch drafts or the board |
+| `update_claims` | Corrects or confirms extracted claims, and flags the findings that depended on a corrected claim as stale (a new fee amount flags none: the rules read only whether a fee is asked) | Delete, re-fire or re-score findings; touch drafts or the board; change a case whose verdict is on the board |
 | `lookup_official_site` | Finds the official domain and classifies the recruiter's domains | Treat the official site as proof the offer is genuine |
 | `find_fraud_notice` | Quotes a recruitment-fraud notice from the employer's own domain, and says whether it mentions fees | Run before an official domain is known, or quote any other site as the employer |
 | `confirm_sender_domain` | Checks whether the official site mentions a look-alike domain, as its own second domain or as a known fake | Open either site, or check a domain that isn't in the offer |
@@ -152,7 +161,7 @@ unconfirmed claims, past the per-case search budget or the monthly quota reserve
 agent calls it, once the evidence is already decisive.
 
 Four verbs are **human only**: `publish_verdict` (posts a verdict, with its evidence, to the
-Offer Board), `retract_verdict` (removes a post and logs why), `record_outcome` (records the
+Offer Board, exactly as the person read the case), `retract_verdict` (removes a post and logs why), `record_outcome` (records the
 person's own decision) and `run_remaining_checks` (spends searches after a decisive result).
 They are **never registered as a tool**. The agent's tool list doesn't include them, and they
 refuse any caller but the human, even when called directly. A click in the UI counts as the
@@ -160,26 +169,28 @@ human; the planner's own searches count as the agent, and the activity log shows
 caller is a field in the request, which is safe only because the server listens on
 `127.0.0.1` alone.
 
-## Stack (planned)
+## Stack
 
 - Python 3.13 for development, runs on 3.11+
 - [`serpapi`](https://pypi.org/project/serpapi/) 1.1.2, SerpApi's official Python client, as
   the only runtime dependency
 - Standard-library HTTP server; plain HTML, CSS and JavaScript UI with no build step
-- pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end test and
-  the demo recording
+- pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and,
+  next, the demo recording
 - Three search providers behind one interface: **live** (your SerpApi key, with a local
   cache), **replay** (real SerpApi responses recorded during development and labelled with
-  their date; no key needed), and **fake** (synthetic data for the tests)
+  their date; no key needed; the recordings are next), and **fake** (synthetic data for the
+  tests)
 
 ## Setup, run, test
 
-`make setup`, `make test`, `make lint`, `./verify.sh` and the command-line investigator work
-today; `make run` and the web app land by 8 October 2026. The commands, on macOS or Linux:
+It needs **Python 3.11 or newer**. `make setup` uses `python3.13` unless you name another
+interpreter: `make setup PY=python3.12` (or any 3.11+ on your machine). The commands, on macOS
+or Linux:
 
 ```bash
 cp .env.example .env          # add your own SERPAPI_KEY, or leave it empty for replay mode
-make setup                    # virtualenv + hash-locked install
+make setup                    # virtualenv + hash-locked install (PY=python3.x for another 3.11+)
 make run                      # http://127.0.0.1:8741
 make test                     # the whole suite, offline
 make lint
@@ -197,7 +208,40 @@ copy .env.example .env
 .venv\Scripts\python -m pytest
 ```
 
-With no key in `.env`, the app starts in replay mode and says so on every screen.
+### Run it
+
+```bash
+.venv/bin/python -m offer_checkpost serve                  # or: make run
+.venv/bin/python -m offer_checkpost serve --provider fake  # the synthetic test data
+.venv/bin/python -m offer_checkpost serve --port 8800      # or set PORT; 0 picks a free port
+```
+
+On Windows:
+
+```bat
+.venv\Scripts\python -m offer_checkpost serve
+.venv\Scripts\python -m offer_checkpost serve --provider fake --port 8800
+```
+
+It prints one line, the address to open (`http://127.0.0.1:8741` unless you chose another
+port) and the provider serving searches, then runs until Ctrl-C. Everything in it is gone when
+it stops.
+
+- **Which searches it serves.** `--provider`, else `OFFER_CHECKPOST_PROVIDER`, else **live**
+  SerpApi when `SERPAPI_KEY` is set, else **replay**: real SerpApi responses recorded on a
+  stated date, with no key needed. Each setting is read from the environment, else from `.env`
+  in the directory you run it from, so a key kept in `.env` needs no `export`. The page names
+  the provider in its header, and in replay a banner says when the responses were recorded
+  and that they are not live. **fake** serves
+  the synthetic data the tests use: it shows the flow, not real search results.
+- **Only this machine.** The server listens on `127.0.0.1` and refuses to start on any other
+  address. Who is calling (`human` for a click in the page, `agent` for the planner or an MCP
+  client) is a field of each request, so the human-only verbs stay human-only only while every
+  request comes from this machine. A web page open in the same browser can still send
+  requests to `127.0.0.1`, so the server also refuses a request addressed to any other host
+  name, one sent from another site's page, and a call that isn't sent as JSON, which another
+  site's page can't send without first asking the browser for a permission this server never
+  grants.
 
 To watch the planner work on a sample offer with no key, against the synthetic test data:
 
@@ -210,7 +254,11 @@ the draft verdict and the activity log. `--as agent` makes every call the agent'
 published from the command line: publishing is a person's click in the app.
 
 `./verify.sh` checks this README, the licence, the ignore rules for secrets and the sample
-environment file, then runs lint and the tests.
+environment file, then runs lint and the tests (`PY=python3.12 ./verify.sh` builds its
+virtualenv from another 3.11+ interpreter). The end-to-end tests drive the page itself in Google
+Chrome through Playwright (paste, confirm, investigate, publish, corrections, the call-log strip,
+the replay banner); where Chrome isn't installed they are skipped with the reason, and no
+browser is ever downloaded.
 
 ## What it can't check
 

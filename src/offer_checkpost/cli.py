@@ -1,7 +1,10 @@
 """The command line.
 
+    python -m offer_checkpost serve [--port N] [--provider fake|replay]
     python -m offer_checkpost investigate <file> [--provider fake|replay] [--as human|agent]
-    python -m offer_checkpost serve
+
+``serve`` runs the web app on 127.0.0.1 (port ``--port``, else ``PORT``, else 8741) until
+Ctrl-C. It prints one line: the address to open and the provider serving searches.
 
 ``investigate`` does what a person does in the app, one ``invoke`` call at a time: it opens a
 case from the offer message in <file>, confirms the claims as they were extracted,
@@ -11,10 +14,11 @@ log. ``--as agent`` makes every call the agent's, as an MCP client's would be; t
 own searches are the agent's either way. Nothing is published: that is a person's click in
 the app.
 
-Without ``--provider``, the provider is the one ``OFFER_CHECKPOST_PROVIDER`` names in the
-environment, else live when ``SERPAPI_KEY`` is set there and replay when it isn't. ``fake``
-serves the synthetic test fixtures; ``replay`` serves recorded SerpApi responses and never
-makes one up.
+For both, without ``--provider``, the provider is the one ``OFFER_CHECKPOST_PROVIDER`` names
+in the environment, else live when ``SERPAPI_KEY`` is set there and replay when it isn't.
+``fake`` serves the synthetic test fixtures; ``replay`` serves recorded SerpApi responses and
+never makes one up. Run as a program, the environment is the process's own over the settings in
+``.env`` in the working directory, so a key kept in ``.env`` is found without being exported.
 """
 
 from __future__ import annotations
@@ -28,31 +32,83 @@ from pathlib import Path
 from typing import Any
 
 from offer_checkpost.invoke import invoke
-from offer_checkpost.providers import FakeSearchProvider, ReplaySearchProvider
+from offer_checkpost.providers import FakeSearchProvider, ReplaySearchProvider, SearchError
 from offer_checkpost.rules import RULES
+from offer_checkpost.server import DEFAULT_PORT, HOST, make_server
 from offer_checkpost.store import Store
 
 PROVIDERS = {"fake": FakeSearchProvider.from_fixtures, "replay": ReplaySearchProvider}
 WIDTH = 99
 _LABEL = {"skipped": "skip", "reordered": "reorder", "stopped": "stop", "reused": "reuse"}
 _DETAIL = " " * 9
+_PROVIDER_HELP = (
+    "fake: the synthetic test fixtures; replay: recorded SerpApi responses. Default: "
+    "OFFER_CHECKPOST_PROVIDER, else live with SERPAPI_KEY set in the environment or .env, else "
+    "replay"
+)
 
 
 def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] = os.environ) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command == "serve":
-        print(
-            "offer_checkpost: serve is not built yet: the web UI arrives in the next slice",
-            file=sys.stderr,
-        )
-        return 2
+        port = _port(parser, args.port, environ)
+        return serve(_store(parser, args, environ), port)
     try:
         text = args.file.read_text(encoding="utf-8")
     except OSError as e:
         parser.error(f"cannot read {args.file}: {e.strerror}")
+    return investigate(text, _store(parser, args, environ), args.actor, source=args.file)
+
+
+def settings(environ: Mapping[str, str] = os.environ, path: Path = Path(".env")) -> dict[str, str]:
+    """``environ`` over the ``NAME=value`` lines of ``path``, when there is such a file: a
+    variable the environment sets, even to nothing, wins over the file. Blank lines and ``#``
+    comments are skipped, an ``export`` prefix and quotes around a value are dropped, and nothing
+    is expanded. The values are passed on, never printed."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return dict(environ)
+    found = {}
+    for line in lines:
+        name, sep, value = line.strip().removeprefix("export ").partition("=")
+        name, value = name.strip(), value.strip()
+        if not sep or not name or name.startswith("#"):
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        found[name] = value
+    return {**found, **environ}
+
+
+def _store(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, environ: Mapping[str, str]
+) -> Store:
+    """The store the settings describe, or a usage error saying which setting is wrong: a
+    judge who sets the provider to live without a key gets one line, not a traceback."""
+    for name in ("OFFER_CHECKPOST_MAX_SEARCHES", "OFFER_CHECKPOST_QUOTA_RESERVE"):
+        raw = environ.get(name, "").strip()
+        if raw and not raw.isdigit():
+            parser.error(f"{name} must be a whole number, not {raw!r}")
     provider = PROVIDERS[args.provider]() if args.provider else None
-    return investigate(text, Store.from_env(environ, provider), args.actor, source=args.file)
+    try:
+        return Store.from_env(environ, provider)
+    except SearchError as failure:
+        parser.error(failure.message)
+    except ValueError as failure:
+        parser.error(str(failure))
+
+
+def _port(parser: argparse.ArgumentParser, flag: int | None, environ: Mapping[str, str]) -> int:
+    raw = str(flag) if flag is not None else environ.get("PORT", "").strip() or str(DEFAULT_PORT)
+    try:
+        port = int(raw)
+    except ValueError:
+        port = -1
+    if not 0 <= port <= 65535:
+        parser.error(f"the port must be a whole number from 0 to 65535, not {raw!r}")
+    return port
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -61,7 +117,18 @@ def _parser() -> argparse.ArgumentParser:
         description="Checks a job offer's claims against SerpApi results before anyone pays.",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="command")
-    commands.add_parser("serve", help="run the web app on 127.0.0.1 (arrives in the next slice)")
+    web = commands.add_parser(
+        "serve",
+        help="run the web app on 127.0.0.1 until Ctrl-C",
+        description="Serves the web app on 127.0.0.1 only, until Ctrl-C. Open the address it "
+        "prints in a browser on this machine.",
+    )
+    web.add_argument(
+        "--port",
+        type=int,
+        help=f"the port to listen on; 0 picks a free one. Default: PORT, else {DEFAULT_PORT}",
+    )
+    web.add_argument("--provider", choices=sorted(PROVIDERS), help=_PROVIDER_HELP)
     run = commands.add_parser(
         "investigate",
         help="open, confirm, investigate and draft one offer message, printing the trace",
@@ -70,13 +137,7 @@ def _parser() -> argparse.ArgumentParser:
         "nothing.",
     )
     run.add_argument("file", type=Path, help="a text file holding the offer message")
-    run.add_argument(
-        "--provider",
-        choices=sorted(PROVIDERS),
-        help="fake: the synthetic test fixtures; replay: recorded SerpApi responses. Default: "
-        "OFFER_CHECKPOST_PROVIDER, else live with SERPAPI_KEY set in the environment, else "
-        "replay",
-    )
+    run.add_argument("--provider", choices=sorted(PROVIDERS), help=_PROVIDER_HELP)
     run.add_argument(
         "--as",
         dest="actor",
@@ -85,6 +146,24 @@ def _parser() -> argparse.ArgumentParser:
         help="who makes the calls (default: human, a person at the keyboard)",
     )
     return parser
+
+
+def serve(store: Store, port: int) -> int:
+    """Serves the app for ``store`` on 127.0.0.1:``port`` until Ctrl-C, or until the server is
+    shut down from another thread. Returns 0, or 1 when the port can't be listened on."""
+    try:
+        server = make_server(store, HOST, port)
+    except OSError as e:
+        print(f"offer_checkpost: cannot listen on {HOST}:{port}: {e.strerror}", file=sys.stderr)
+        return 1
+    print(f"Offer Checkpost on http://{store.server['bind']} · {_describe(store)}", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
 
 
 def investigate(text: str, store: Store, actor: str, *, source: Path | str = "the message") -> int:

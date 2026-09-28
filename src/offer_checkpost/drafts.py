@@ -7,15 +7,22 @@ which step added each signal. A draft cites only the signals the decision table 
 stale, superseded, replaced or set-aside signal is never cited, and every search-sourced
 signal it cites must be named in a numbered trace step's ``signalsAdded``. A finding is worded
 as its reader wrote it (``detail``) or quoted from the message itself, so no draft states more
-than the evidence.
+than the evidence. Each draft names the case ``revision`` it was written from, so a draft
+older than a correction or a check can be told apart from a current one.
+
+A published post is a snapshot (``post``): the message's claims and the evidence cards as they
+stood when a person published it. Its WhatsApp text and its place on the board page are built
+from the post alone, never from the case, so nothing done to the case later changes what a
+student was sent.
 
 Nothing here sends, files or publishes anything, and no draft calls an offer genuine or safe.
 """
 
 from __future__ import annotations
 
+import copy
 import html
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -41,6 +48,8 @@ _BAND_WORDS = {
 }
 
 _IST = timezone(timedelta(hours=5, minutes=30))
+
+_RED_LABELS = frozenset({"likely_impersonation", "pay_to_apply_red_flag"})
 
 # Each of these rules quotes a page, a website or an apply link on the official domain, by
 # construction of its reader, so its evidence link names the official domain.
@@ -231,6 +240,7 @@ def verdict(case: Case, *, drafted_at: str) -> dict[str, Any]:
         "band": decision.band,
         "summary": "\n".join(lines),
         "evidenceIds": cited,
+        "revision": case["revision"],
         "draftedAt": drafted_at,
     }
 
@@ -391,6 +401,7 @@ def recruiter_reply(case: Case, *, drafted_at: str) -> dict[str, Any]:
         "text": "\n".join(lines),
         "questions": questions,
         "evidenceIds": [sid for q in questions for sid in q["signalIds"]],
+        "revision": case["revision"],
         "draftedAt": drafted_at,
     }
 
@@ -452,6 +463,7 @@ def cybercrime_report(case: Case, *, drafted_at: str) -> dict[str, Any]:
     return {
         "text": "\n".join(lines),
         "evidenceIds": [c["signalId"] for c in cards],
+        "revision": case["revision"],
         "draftedAt": drafted_at,
     }
 
@@ -461,31 +473,70 @@ def _red_first(counted: list[Signal]) -> list[Signal]:
     return red + [s for s in counted if RULES[s["rule"]].direction == "green"]
 
 
-# ---- a published verdict: "Copy for WhatsApp" and the board page --------------------------
+# ---- a published verdict: the post, "Copy for WhatsApp" and the board page ------------------
 
 
-def _footer(label: str) -> list[str]:
+def label_misfit(label: str, band: str) -> str | None:
+    """Why ``label`` would say more than a verdict drafted as ``band`` found, or None when it
+    fits. "No contradictions found" is the best band's own wording, so it takes that band and
+    no other; a red-flag label says the checks found something against the offer, so it never
+    takes the best band. "Unverified: ask questions first" fits any band."""
+    if label == "no_contradictions_found" and band != "consistent_with_genuine":
+        return (
+            f"the label '{BOARD_LABELS[label]}' is not what the checks found: the draft verdict "
+            f"is {_BAND_WORDS[band]}"
+        )
+    if label in _RED_LABELS and band == "consistent_with_genuine":
+        return (
+            f"the label '{BOARD_LABELS[label]}' says more than the checks found: nothing they "
+            "found contradicts the offer"
+        )
+    return None
+
+
+def post(
+    case: Case, *, label: str, note: str, published_at: str, by: str = "human"
+) -> dict[str, Any]:
+    """A board post for ``case``: the person's label and note, and a snapshot of the drafted
+    band, the message's claims (``offer``) and the evidence cards behind the band, with its
+    "Copy for WhatsApp" text built from them."""
+    decision = _decision(case)
+    published = {
+        "caseId": case["id"],
+        "label": label,
+        "note": note,
+        "band": decision.band,
+        "offer": _offer_line(case["claims"]),
+        "evidence": copy.deepcopy(citations(case, decision.evidence_ids)),
+        "publishedAt": published_at,
+        "by": by,
+    }
+    published["whatsapp"] = whatsapp_text(published)
+    return published
+
+
+def _footer(band: str) -> list[str]:
     lines = ["This describes this message, not the company named in it."]
-    if label == "no_contradictions_found":
+    if band == "consistent_with_genuine":
         lines.append("Nothing the checks found contradicts it; that is not proof it is real.")
     return lines
 
 
-def whatsapp_text(case: Case, post: dict[str, Any]) -> str:
+def whatsapp_text(post: dict[str, Any]) -> str:
     """The "Copy for WhatsApp" text of one board post: the person's label and note, what the
     message claims, and the evidence behind the drafted band with its links. It names no
     recruiter phone number or email address."""
-    offer = _offer_line(case["claims"])
+    offer = post["offer"]
     lines = [
         f"*Offer check: {BOARD_LABELS[post['label']]}*",
         f"The message: {offer}" if offer else "The message names no company, role or city.",
         "",
         "What the checks found:",
-        *[f"• {_plain_line(c)}" for c in citations(case, _decision(case).evidence_ids)],
+        *[f"• {_plain_line(c)}" for c in post["evidence"]],
     ]
     if post["note"]:
         lines += ["", f"Note: {post['note']}"]
-    lines += ["", *_footer(post["label"])]
+    lines += ["", *_footer(post["band"])]
     lines.append(
         f"Published {_moment(post['publishedAt'])} by a person, from web search results "
         "checked with Offer Checkpost."
@@ -539,12 +590,12 @@ def _item_html(card: dict[str, Any]) -> str:
     return f"<li>{item}</li>"
 
 
-def _post_html(post: dict[str, Any], case: Case) -> str:
+def _post_html(post: dict[str, Any]) -> str:
     e = html.escape
-    offer = _offer_line(case["claims"]) or "The message names no company, role or city."
-    items = "".join(_item_html(c) for c in citations(case, _decision(case).evidence_ids))
+    offer = post["offer"] or "The message names no company, role or city."
+    items = "".join(_item_html(c) for c in post["evidence"])
     note = f'<p class="note">{e(post["note"])}</p>' if post["note"] else ""
-    footer = "".join(f'<p class="meta">{e(line)}</p>' for line in _footer(post["label"]))
+    footer = "".join(f'<p class="meta">{e(line)}</p>' for line in _footer(post["band"]))
     return (
         f'<article class="post" id="{e(post["caseId"])}">'
         f'<p class="label {e(post["label"])}">{e(BOARD_LABELS[post["label"]])}</p>'
@@ -555,14 +606,12 @@ def _post_html(post: dict[str, Any], case: Case) -> str:
     )
 
 
-def board_html(
-    board: list[dict[str, Any]], cases: Mapping[str, Case], *, generated_at: str
-) -> str:
+def board_html(board: list[dict[str, Any]], *, generated_at: str) -> str:
     """The downloadable Offer Board: one self-contained HTML page (no script, no external
     file) with every published post, each with its label, note, the message's claims and the
-    evidence behind it. ``cases`` maps a case id to its case. A retracted post is no longer on
-    the board, so it is not on the page."""
-    posts = "".join(_post_html(post, cases[post["caseId"]]) for post in board)
+    evidence behind it, all from the post as it was published. A retracted post is no longer
+    on the board, so it is not on the page."""
+    posts = "".join(_post_html(post) for post in board)
     count = f"{len(board)} published verdict{'' if len(board) == 1 else 's'}"
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'

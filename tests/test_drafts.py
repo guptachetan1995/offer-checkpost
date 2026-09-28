@@ -59,6 +59,7 @@ class Builder:
             "fingerprint": "not read by the drafts",
             "sameAs": None,
             "claims": claims,
+            "revision": 0,
             "signals": [],
             "trace": [],
             "budget": {
@@ -236,13 +237,7 @@ def sample_c(*, remaining=False):
 
 
 def post(case, label, note=""):
-    return {
-        "caseId": case["id"],
-        "label": label,
-        "note": note,
-        "publishedAt": PUBLISHED_AT,
-        "by": "human",
-    }
+    return drafts.post(case, label=label, note=note, published_at=PUBLISHED_AT)
 
 
 def every_draft(case, label="unverified_ask_questions"):
@@ -251,8 +246,8 @@ def every_draft(case, label="unverified_ask_questions"):
         "verdict": drafts.verdict(case, drafted_at=DRAFTED_AT)["summary"],
         "reply": drafts.recruiter_reply(case, drafted_at=DRAFTED_AT)["text"],
         "report": drafts.cybercrime_report(case, drafted_at=DRAFTED_AT)["text"],
-        "whatsapp": drafts.whatsapp_text(case, board[0]),
-        "board": drafts.board_html(board, {case["id"]: case}, generated_at=PUBLISHED_AT),
+        "whatsapp": board[0]["whatsapp"],
+        "board": drafts.board_html(board, generated_at=PUBLISHED_AT),
     }
 
 
@@ -358,9 +353,9 @@ def test_a_cybercrime_report_says_what_was_asked_when_by_which_contact_and_the_e
 
 def test_a_whatsapp_text_carries_the_label_the_note_and_the_evidence_links():
     case = sample_a()
-    text = drafts.whatsapp_text(
-        case, post(case, "likely_impersonation", "Do not pay. Brand's real site says no fee.")
-    )
+    text = post(case, "likely_impersonation", "Do not pay. Brand's real site says no fee.")[
+        "whatsapp"
+    ]
     assert text.split("\n") == [
         "*Offer check: Likely impersonation*",
         "The message: Data Entry Executive (WFH) · in the name of Brand · Noida · pay "
@@ -478,7 +473,7 @@ def test_b_cybercrime_report_lists_greens_separately_and_no_money():
 
 def test_b_whatsapp_text_for_no_contradictions_says_that_is_not_proof():
     case = sample_b()
-    text = drafts.whatsapp_text(case, post(case, "no_contradictions_found"))
+    text = post(case, "no_contradictions_found")["whatsapp"]
     lines = text.split("\n")
     assert lines[0] == "*Offer check: No contradictions found*"
     assert lines[1] == (
@@ -573,10 +568,8 @@ def test_c_cybercrime_report_lists_both_contacts_and_the_documents_asked_for():
 
 def test_c_board_post_names_no_recruiter_contact():
     case = sample_c(remaining=True)
-    text = drafts.whatsapp_text(case, post(case, "unverified_ask_questions"))
-    page = drafts.board_html(
-        [post(case, "unverified_ask_questions")], {"case_001": case}, generated_at=PUBLISHED_AT
-    )
+    text = post(case, "unverified_ask_questions")["whatsapp"]
+    page = drafts.board_html([post(case, "unverified_ask_questions")], generated_at=PUBLISHED_AT)
     for contact in case["claims"]["contacts"]:
         assert contact["value"] not in text and contact["value"] not in page
     assert text.startswith("*Offer check: Unverified: ask questions first*\n")
@@ -799,7 +792,7 @@ def test_the_board_page_renders_only_published_posts_escaped_with_safe_links():
         "link": "javascript:alert(1)",
     }
     board = [post(a, "likely_impersonation", "<script>alert('x')</script> & more")]
-    page = drafts.board_html(board, {"case_001": a, "case_002": c}, generated_at=PUBLISHED_AT)
+    page = drafts.board_html(board, generated_at=PUBLISHED_AT)
     assert page.startswith("<!doctype html>")
     assert "<script" not in page and "javascript:" not in page
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt; &amp; more" in page
@@ -813,5 +806,5 @@ def test_the_board_page_renders_only_published_posts_escaped_with_safe_links():
 
 
 def test_an_empty_board_page_says_nothing_is_published():
-    page = drafts.board_html([], {}, generated_at=PUBLISHED_AT)
+    page = drafts.board_html([], generated_at=PUBLISHED_AT)
     assert "No verdicts published yet." in page and "0 published verdicts" in page

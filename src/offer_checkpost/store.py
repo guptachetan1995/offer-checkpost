@@ -6,15 +6,19 @@ Only ``invoke`` changes this state, through a tool's or a verb's handler, and it
 investigation's own checks go through ``invoke`` again.
 
 ``Store.provider`` is the search provider as the rest of the app sees it: every search it
-serves lands in the call log, and its Account API counts come back reduced to the five the
-app shows. A handler that can't do what it was asked raises ``Refused`` before it changes
-anything; ``invoke`` logs the refusal and returns its message.
+serves lands in the call log, its Account API counts come back reduced to the five the app
+shows, and what it serves is made fit for JSON first (``well_formed``): a search response is
+outside input, and one lone surrogate or infinite number kept from it would break every later
+answer that carried the state. A handler that can't do what it was asked raises ``Refused``
+before it changes anything; ``invoke`` logs the refusal and returns its message.
 """
 
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
+import math
 import os
 import re
 import threading
@@ -24,7 +28,12 @@ from typing import Any
 
 from offer_checkpost import planner
 from offer_checkpost.checks import search_name
-from offer_checkpost.providers import SearchProvider, SearchResult, provider_from_env
+from offer_checkpost.providers import (
+    ReplaySearchProvider,
+    SearchProvider,
+    SearchResult,
+    provider_from_env,
+)
 from offer_checkpost.rules import Signal
 from offer_checkpost.scrub import clean_text, scrub_account
 
@@ -38,6 +47,10 @@ OUTCOMES = ("walked_away", "proceeding", "reported_1930")
 # scans look for and a viewer of the page or the demo video could take for one. The first 16
 # are plenty to tell a few thousand pasted messages apart.
 FINGERPRINT_HEX = 16
+
+# Half of a UTF-16 surrogate pair on its own, such as an emoji cut in half when a message was
+# copied: not a Unicode character, so no UTF-8 text, and no answer, can carry it.
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 
 
 class Refused(Exception):
@@ -57,11 +70,11 @@ class CallLogged(SearchProvider):
     def search(self, params: Mapping[str, Any]) -> SearchResult:
         result = self.inner.search(params)
         self._log(result)
-        return result
+        return dataclasses.replace(result, data=well_formed(result.data))
 
     def account(self) -> dict[str, int] | None:
         counts = self.inner.account()
-        return None if counts is None else scrub_account(counts)
+        return None if counts is None else well_formed(scrub_account(counts))
 
 
 class Store:
@@ -87,6 +100,9 @@ class Store:
             "provider": provider.name,
             "key": "set" if key_set else "missing",
         }
+        if isinstance(provider, ReplaySearchProvider):
+            # The page says when the replayed responses were recorded: they are not today's.
+            self.server["recorded"] = list(provider.recorded_dates)
         self.lock = threading.RLock()
 
     @classmethod
@@ -130,6 +146,9 @@ class Store:
             "fingerprint": None,
             "sameAs": None,
             "claims": claims,
+            # Counts every change to the claims and the findings, so a draft, and a person's
+            # publish click, can say which version of the case they were made from.
+            "revision": 0,
             "signals": [],
             "trace": [],
             "budget": {
@@ -269,6 +288,20 @@ def _contact_key(contact: Mapping[str, Any]) -> str:
 
 
 _SUMMARISE_OVER = 200
+
+
+def well_formed(value: Any) -> Any:
+    """``value`` with each lone surrogate in its text replaced by U+FFFD and each infinite or
+    NaN number by None: what JSON can carry to the page."""
+    if isinstance(value, str):
+        return LONE_SURROGATE.sub("\ufffd", value)
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Mapping):
+        return {well_formed(k): well_formed(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [well_formed(v) for v in value]
+    return value
 
 
 def redact(value: Any) -> Any:

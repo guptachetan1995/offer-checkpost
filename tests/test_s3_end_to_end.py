@@ -4,6 +4,7 @@ the provider faked (``tests/fixtures/serp/``, never the network). The traces are
 planner policy fixes for the three samples; the drafts cite only what those traces found; and
 every human-only verb is refused to the agent while a person's call goes through."""
 
+import copy
 import json
 import re
 from datetime import datetime
@@ -53,6 +54,13 @@ def agent_investigates(store, name):
     case_id = call(store, "open_case", {"text": text})["id"]
     call(store, "update_claims", {"case_id": case_id, "confirm": True})
     return case_id, call(store, "investigate", {"case_id": case_id})
+
+
+def as_read(store, case_id, label, note=""):
+    """publish_verdict's arguments for the case as it stands: what a person who has just read
+    it sends."""
+    revision = store.cases[case_id]["revision"]
+    return {"case_id": case_id, "label": label, "note": note, "revision": revision}
 
 
 def walk(case, lines=None):
@@ -139,7 +147,7 @@ def test_sample_a_the_agent_cannot_publish_or_decide_anything_a_person_can(store
     case_id, _ = agent_investigates(store, "a")
     call(store, "draft_verdict", {"case_id": case_id})
     attempts = {
-        "publish_verdict": {"case_id": case_id, "label": "likely_impersonation", "note": ""},
+        "publish_verdict": as_read(store, case_id, "likely_impersonation"),
         "retract_verdict": {"case_id": case_id, "reason": "posted by mistake"},
         "record_outcome": {"case_id": case_id, "outcome": "walked_away"},
         "run_remaining_checks": {"case_id": case_id},
@@ -160,23 +168,29 @@ def test_sample_a_the_agent_cannot_publish_or_decide_anything_a_person_can(store
     assert post["whatsapp"].startswith("*Offer check: Likely impersonation*")
     assert "hr.onboarding@" not in post["whatsapp"]
     assert store.board == [post] and store.cases[case_id]["status"] == "published"
-    page = drafts.board_html(store.board, store.cases, generated_at=NOW.isoformat())
+    page = drafts.board_html(store.board, generated_at=NOW.isoformat())
     assert "Likely impersonation" in page and "careers.brand.example/fraud-alert" in page
 
     call(store, "record_outcome", attempts["record_outcome"], actor="human")
     assert store.cases[case_id]["outcome"]["value"] == "walked_away"
 
 
-def test_sample_a_a_published_case_stays_published_when_investigated_again(store):
+def test_sample_a_a_published_case_is_investigated_again_only_once_retracted(store):
     case_id, _ = agent_investigates(store, "a")
     call(store, "draft_verdict", {"case_id": case_id})
-    args = {"case_id": case_id, "label": "likely_impersonation", "note": "shared with batch"}
+    args = as_read(store, case_id, "likely_impersonation", "shared with batch")
     post = call(store, "publish_verdict", args, actor="human")
+    before = without_log(store)
 
+    error = refusal(store, "investigate", {"case_id": case_id})
+
+    assert "on the Offer Board" in error and without_log(store) == before
+    retracted = {"case_id": case_id, "reason": "checking it again"}
+    call(store, "retract_verdict", retracted, actor="human")
     call(store, "investigate", {"case_id": case_id})
-
     case = store.cases[case_id]
-    assert case["status"] == "published" and case["publishedVerdict"] == post
+    assert case["status"] == "retracted" and case["publishedVerdict"] is None
+    assert post["evidence"][1]["signalId"] == "sig_3" and not post["evidence"][1]["fromText"]
     # A second investigation checks afresh: the first one's findings are superseded, never
     # counted twice, and the same two searches are decisive again.
     assert case["budget"] == {
@@ -466,10 +480,9 @@ def test_sample_b_investigated_twice_cites_each_finding_once(store):
     assert len(evidence) == 4 and len(set(evidence)) == 4
     report = call(store, "draft_cybercrime_report", args)["text"]
     assert report.count("office found on Maps") == 1
-    post = call(
-        store, "publish_verdict", {**args, "label": "no_contradictions_found", "note": ""}, "human"
-    )
-    assert [s["id"] for s in post["evidence"]] == ["sig_5", "sig_6", "sig_7", "sig_8"]
+    publish = as_read(store, case_id, "no_contradictions_found")
+    post = call(store, "publish_verdict", publish, "human")
+    assert [card["signalId"] for card in post["evidence"]] == ["sig_5", "sig_6", "sig_7"]
     assert post["whatsapp"].count("•") == 3
 
 
@@ -512,3 +525,131 @@ def test_a_failed_search_is_an_error_on_the_log_and_a_failed_line_on_the_trace()
     assert (out["ok"], out["outcome"]) == (False, "error")
     assert out["error"].startswith("no fake fixture")
     assert store.cases[case_id]["trace"][-1]["action"] == "failed"
+
+
+# ---- publishing: the case a person read, and nothing after ----------------------------------
+
+
+def published_a(store):
+    case_id, _ = agent_investigates(store, "a")
+    call(store, "draft_verdict", {"case_id": case_id})
+    args = as_read(store, case_id, "likely_impersonation", "Do not pay.")
+    return case_id, call(store, "publish_verdict", args, actor="human")
+
+
+def test_a_post_is_a_snapshot_that_nothing_done_to_the_case_rewrites(store):
+    case_id, post = published_a(store)
+    page = drafts.board_html(store.board, generated_at=NOW.isoformat())
+    sent = copy.deepcopy(post)
+
+    rename = {"case_id": case_id, "fields": {"company": "Northwind Bank of India Limited"}}
+    assert "on the Offer Board" in refusal(store, "update_claims", rename)
+    # Even a change made behind invoke's back reaches only the case, never the post.
+    case = store.cases[case_id]
+    case["claims"]["company"]["value"] = "Northwind Bank of India Limited"
+    for signal in case["signals"]:
+        signal["stale"] = True
+        signal["evidence"]["link"] = "https://elsewhere.example/"
+
+    assert store.board == [sent]
+    assert drafts.board_html(store.board, generated_at=NOW.isoformat()) == page
+    assert "in the name of Brand ·" in page and "Northwind" not in page
+    assert page.count("https://careers.brand.example/fraud-alert") == 2  # the href and its text
+
+
+def test_a_click_on_a_case_that_changed_after_the_person_read_it_is_refused(store):
+    case_id, _ = agent_investigates(store, "a")
+    call(store, "draft_verdict", {"case_id": case_id})
+    read = as_read(store, case_id, "likely_impersonation")
+    # Between the person's read and their click, the agent corrects claims that stale nothing,
+    # confirms them and drafts again: the new draft is current, but it is not what was read.
+    edit = {"role": "Relationship Manager", "city": "Pune", "pay": 380000}
+    assert call(store, "update_claims", {"case_id": case_id, "fields": edit})["staleSignals"] == []
+    call(store, "update_claims", {"case_id": case_id, "confirm": True})
+    call(store, "draft_verdict", {"case_id": case_id})
+    before = without_log(store)
+
+    error = refusal(store, "publish_verdict", read, actor="human")
+
+    assert error == (
+        f"{case_id} has changed since it was read (a claim was corrected, or a check ran): read "
+        "it again, then publish"
+    )
+    assert without_log(store) == before and store.board == []
+    post = call(store, "publish_verdict", as_read(store, case_id, "likely_impersonation"), "human")
+    assert post["offer"].startswith("Relationship Manager · in the name of Brand · Pune")
+
+
+def test_only_a_current_draft_verdict_is_published(store):
+    case_id, _ = agent_investigates(store, "a")
+    args = as_read(store, case_id, "likely_impersonation")
+    assert refusal(store, "publish_verdict", args, actor="human") == (
+        f"{case_id} has no draft verdict: draft it, read it, then publish"
+    )
+
+    call(store, "draft_verdict", {"case_id": case_id})
+    call(store, "update_claims", {"case_id": case_id, "fields": {"role": "Clerk"}})
+    args = as_read(store, case_id, "likely_impersonation")
+    assert refusal(store, "publish_verdict", args, actor="human").startswith(
+        f"{case_id}'s draft verdict is older than the case"
+    )
+    assert store.board == []
+
+
+@pytest.mark.parametrize(
+    ("sample", "label", "error"),
+    [
+        (
+            "a",
+            "no_contradictions_found",
+            "the label 'No contradictions found' is not what the checks found: the draft verdict "
+            "is high risk",
+        ),
+        (
+            "b",
+            "likely_impersonation",
+            "the label 'Likely impersonation' says more than the checks found: nothing they "
+            "found contradicts the offer",
+        ),
+        (
+            "b",
+            "pay_to_apply_red_flag",
+            "the label 'Pay-to-apply red flag' says more than the checks found: nothing they "
+            "found contradicts the offer",
+        ),
+    ],
+)
+def test_a_label_that_says_more_than_the_checks_found_is_refused(store, sample, label, error):
+    case_id, _ = agent_investigates(store, sample)
+    call(store, "draft_verdict", {"case_id": case_id})
+
+    assert refusal(store, "publish_verdict", as_read(store, case_id, label), "human") == error
+    assert store.board == []
+
+
+@pytest.mark.parametrize("sample", ["a", "b"])
+def test_asking_questions_first_fits_any_band(store, sample):
+    case_id, _ = agent_investigates(store, sample)
+    call(store, "draft_verdict", {"case_id": case_id})
+    post = call(
+        store, "publish_verdict", as_read(store, case_id, "unverified_ask_questions"), "human"
+    )
+    not_proof = "Nothing the checks found contradicts it; that is not proof it is real."
+    # The closing line follows what the checks found, whatever the label.
+    assert (not_proof in post["whatsapp"].split("\n")) == (
+        post["band"] == "consistent_with_genuine"
+    )
+
+
+def test_a_message_naming_no_company_is_told_why_it_cannot_be_published(store):
+    case_id, result = agent_investigates(store, "task-per-like")
+    assert result["budget"]["stoppedBecause"] == "no_company"
+    call(store, "draft_verdict", {"case_id": case_id})
+
+    error = refusal(
+        store, "publish_verdict", as_read(store, case_id, "unverified_ask_questions"), "human"
+    )
+
+    assert error.startswith(f"{case_id} has no evidence from a search result")
+    assert "names no company" in error and "recruiter reply and 1930 summary" in error
+    assert "investigate it" not in error

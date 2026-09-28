@@ -9,6 +9,7 @@ section runs the real planner on Samples A, B and C against the synthetic fixtur
 the same ``invoke``.
 """
 
+import copy
 import hashlib
 import re
 from datetime import datetime
@@ -52,7 +53,7 @@ AGENT_TOOLS = {
 }
 # The human-only verbs and their arguments.
 HUMAN_VERBS = {
-    "publish_verdict": {"case_id", "label", "note"},
+    "publish_verdict": {"case_id", "label", "note", "revision"},
     "retract_verdict": {"case_id", "reason"},
     "record_outcome": {"case_id", "outcome"},
     "run_remaining_checks": {"case_id"},
@@ -174,18 +175,30 @@ def investigated(store, name="c"):
     return case_id
 
 
+def publish_args(store, case_id, label=LABELS[0], note=""):
+    """Publishing the case as it stands now, the way a person who has just read it would."""
+    revision = store.cases[case_id]["revision"] if case_id in store.cases else 0
+    return {"case_id": case_id, "label": label, "note": note, "revision": revision}
+
+
+def published(store, case_id, label=LABELS[0], note=""):
+    """Drafts the verdict, then publishes it as the person who read it."""
+    ok(store, "draft_verdict", {"case_id": case_id})
+    return ok(store, "publish_verdict", publish_args(store, case_id, label, note))
+
+
 @pytest.fixture
 def ready(store):
     """case_001 stopped on a decisive result; case_002 is on the Offer Board."""
     decisive = investigated(store)
-    published = investigated(store, "a")
-    ok(store, "publish_verdict", {"case_id": published, "label": LABELS[0], "note": ""})
-    return SimpleNamespace(decisive=decisive, published=published)
+    on_board = investigated(store, "a")
+    published(store, on_board)
+    return SimpleNamespace(store=store, decisive=decisive, published=on_board)
 
 
 def verb_args(verb, ready):
     return {
-        "publish_verdict": {"case_id": ready.decisive, "label": LABELS[0], "note": "n"},
+        "publish_verdict": publish_args(ready.store, ready.decisive, note="n"),
         "retract_verdict": {"case_id": ready.published, "reason": "posted to the wrong batch"},
         "record_outcome": {"case_id": ready.decisive, "outcome": OUTCOMES[0]},
         "run_remaining_checks": {"case_id": ready.decisive},
@@ -279,6 +292,8 @@ def test_each_human_verb_is_refused_for_the_agent_and_changes_nothing(
 
 @pytest.mark.parametrize("verb", list(HUMAN_VERBS))
 def test_the_same_verb_call_succeeds_for_a_person(verb, ready, store):
+    if verb == "publish_verdict":
+        ok(store, "draft_verdict", {"case_id": ready.decisive})
     ok(store, verb, verb_args(verb, ready))
     assert store.activity_log[-1]["actor"] == "human"
     assert store.activity_log[-1]["result"] == "ok"
@@ -298,7 +313,7 @@ def test_a_missing_or_forged_actor_is_refused(tool, actor, ready, store):
     before = without_log(store)
     args = {
         "open_case": {"text": "hello"},
-        "publish_verdict": {"case_id": ready.decisive, "label": LABELS[0], "note": ""},
+        "publish_verdict": publish_args(store, ready.decisive),
         "get_case": {"case_id": ready.decisive},
     }[tool]
 
@@ -423,7 +438,7 @@ def test_publish_refuses_a_case_with_no_search_sourced_evidence(store):
     assert [s["source"] for s in store.cases[case_id]["signals"]] == [TEXT_SOURCE]
     before = without_log(store)
 
-    error = refused(store, "publish_verdict", {"case_id": case_id, "label": LABELS[1], "note": ""})
+    error = refused(store, "publish_verdict", publish_args(store, case_id, LABELS[1]))
 
     assert "no evidence from a search result" in error
     assert without_log(store) == before
@@ -433,14 +448,12 @@ def test_publish_refuses_a_case_with_no_search_sourced_evidence(store):
 def test_publish_refuses_when_every_search_signal_is_stale(store):
     case_id = investigated(store)
     ok(store, "update_claims", {"case_id": case_id, "fields": {"company": "Another Firm"}})
-    error = refused(store, "publish_verdict", {"case_id": case_id, "label": LABELS[0], "note": ""})
+    error = refused(store, "publish_verdict", publish_args(store, case_id))
     assert "no evidence from a search result" in error
 
 
 def test_publishing_twice_and_retracting_nothing_are_refused(ready, store):
-    error = refused(
-        store, "publish_verdict", {"case_id": ready.published, "label": LABELS[2], "note": ""}
-    )
+    error = refused(store, "publish_verdict", publish_args(store, ready.published, LABELS[2]))
     assert "already on the Offer Board" in error
     error = refused(store, "retract_verdict", {"case_id": ready.decisive, "reason": "r"})
     assert "no verdict on the Offer Board" in error
@@ -497,11 +510,11 @@ def test_a_person_can_do_everything(fake_planner, store):
     assert ok(store, "get_case", {"case_id": case_id})["id"] == case_id
     assert [c["id"] for c in ok(store, "list_cases", {"status": "investigated"})] == [case_id]
     assert ok(store, "search_budget", {})["provider"] == "fake"
-    post = ok(store, "publish_verdict", {"case_id": case_id, "label": LABELS[0], "note": ""})
+    post = ok(store, "publish_verdict", publish_args(store, case_id))
     ok(store, "record_outcome", {"case_id": case_id, "outcome": "walked_away"})
     ok(store, "retract_verdict", {"case_id": case_id, "reason": "published on the wrong case"})
     assert store.board == [] and store.cases[case_id]["status"] == "retracted"
-    ok(store, "publish_verdict", {"case_id": case_id, "label": LABELS[2], "note": "ask"})
+    ok(store, "publish_verdict", publish_args(store, case_id, LABELS[2], "ask"))
 
     case = store.cases[case_id]
     assert case["status"] == "published"
@@ -513,8 +526,9 @@ def test_a_person_can_do_everything(fake_planner, store):
     assert [p["label"] for p in store.board] == [LABELS[2]]
     assert post["whatsapp"].startswith("*Offer check: Likely impersonation*")
     assert post["band"] == "high_risk" and post["by"] == "human"
-    assert all(s["source"] != TEXT_SOURCE for s in post["evidence"])
-    assert {s["rule"] for s in post["evidence"]} >= {"office_not_found", "no_web_footprint"}
+    assert not all(card["fromText"] for card in post["evidence"])
+    cited = [card["signalId"] for card in post["evidence"]]
+    assert cited == case["draftVerdict"]["evidenceIds"]
     done = {e["tool"] for e in store.activity_log if e["actor"] == "human" and e["result"] == "ok"}
     assert done == set(TOOLS) | set(VERBS)
 
@@ -709,12 +723,67 @@ def test_correcting_pay_and_fee_writes_rupee_claims(store):
 
 
 def test_update_claims_leaves_drafts_board_and_status_alone(ready, store):
-    before = store.cases[ready.published]
-    kept = {k: before[k] for k in ("draftVerdict", "publishedVerdict", "status", "trace")}
+    ok(store, "draft_verdict", {"case_id": ready.decisive})
+    before = copy.deepcopy(store.cases[ready.decisive])
+    board = copy.deepcopy(store.board)
+
+    result = ok(store, "update_claims", {"case_id": ready.decisive, "fields": {"role": "Clerk"}})
+
+    after = store.cases[ready.decisive]
+    for key in ("draftVerdict", "draftReply", "draftReport", "publishedVerdict", "status"):
+        assert after[key] == before[key], key
+    assert after["trace"] == before["trace"] and store.board == board
+    # The one count a draft is checked against: this draft was written from the case before.
+    assert result["corrected"] == ["role"]
+    assert after["revision"] == before["revision"] + 1
+    assert after["draftVerdict"]["revision"] == before["revision"]
+
+
+@pytest.mark.parametrize(
+    ("tool", "extra"),
+    [
+        ("update_claims", {"fields": {"company": "Northwind Bank of India Limited"}}),
+        ("update_claims", {"confirm": True}),
+        ("investigate", {}),
+        ("lookup_official_site", {}),
+        ("check_office", {}),
+        ("confirm_sender_domain", {"domain": "brand-careers.example"}),
+    ],
+)
+@pytest.mark.parametrize("actor", ["agent", "human"])
+def test_a_case_on_the_board_is_not_changed_until_a_person_retracts_it(
+    tool, extra, actor, ready, fake_planner, store
+):
+    before = without_log(store)
+    planner_calls = len(fake_planner.calls)
+
+    error = refused(store, tool, {"case_id": ready.published, **extra}, actor=actor)
+
+    assert error == (
+        f"{ready.published}'s verdict is on the Offer Board, and the case stays as it was "
+        "published: a person retracts the verdict first, then the case can be corrected or "
+        "checked again"
+    )
+    assert without_log(store) == before
+    assert len(fake_planner.calls) == planner_calls
+    assert store.activity_log[-1]["result"] == "refused"
+
+
+def test_running_the_remaining_checks_on_a_case_on_the_board_is_refused_too(ready, store):
+    before = without_log(store)
+    error = refused(store, "run_remaining_checks", {"case_id": ready.published})
+    assert "on the Offer Board" in error and without_log(store) == before
+
+
+def test_once_retracted_the_case_can_be_corrected_and_published_again(ready, store):
+    ok(store, "retract_verdict", {"case_id": ready.published, "reason": "wrong company"})
     ok(store, "update_claims", {"case_id": ready.published, "fields": {"role": "Clerk"}})
-    after = store.cases[ready.published]
-    assert {k: after[k] for k in kept} == kept
-    assert [p["caseId"] for p in store.board] == [ready.published]
+    assert store.cases[ready.published]["status"] == "retracted"
+
+    post = published(store, ready.published, LABELS[2])
+
+    assert post["offer"].startswith("Clerk · in the name of Brand")
+    assert store.cases[ready.published]["status"] == "published"
 
 
 def test_search_budget_returns_only_the_five_counts():
@@ -804,14 +873,13 @@ def test_sample_a_a_person_starts_the_agent_searches_only_a_person_publishes(liv
     draft = ok(store, "draft_verdict", {"case_id": case_id}, actor="agent")
     assert draft["band"] == "high_risk"
     before = without_log(store)
-    refused(
-        store, "publish_verdict", {"case_id": case_id, "label": LABELS[0], "note": ""}, "agent"
-    )
+    args = publish_args(store, case_id)
+    refused(store, "publish_verdict", args, "agent")
     assert without_log(store) == before
 
-    post = ok(store, "publish_verdict", {"case_id": case_id, "label": LABELS[0], "note": ""})
+    post = ok(store, "publish_verdict", args)
     assert post["band"] == "high_risk"
-    assert "fee_contradicts_employer" in {s["rule"] for s in post["evidence"]}
+    assert "fee_contradicts_employer" in {card["rule"] for card in post["evidence"]}
     assert post["whatsapp"].startswith("*Offer check: Likely impersonation*")
 
 

@@ -1,16 +1,22 @@
 """The command line: ``investigate`` prints each sample's trace, band, draft verdict and activity
 log through the same ``invoke`` the app uses; ``--as agent`` makes every call the agent's; replay
-serves only what was recorded; ``serve`` waits for the web UI."""
+serves only what was recorded; ``serve`` answers on 127.0.0.1 at the address it prints and stops
+cleanly on Ctrl-C; run as a program, it reads ``.env`` under the environment."""
 
+import http.client
 import json
 import os
+import re
+import signal
+import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
 
-from offer_checkpost import cli
+from offer_checkpost import cli, server
 from offer_checkpost.providers import (
     FIXTURES_DIR,
     ROUTES_FILE,
@@ -179,11 +185,145 @@ def test_a_missing_file_is_a_usage_error(capsys, tmp_path):
     assert "cannot read" in capsys.readouterr().err
 
 
-def test_serve_waits_for_the_web_ui(capsys):
-    assert cli.main(["serve"], {}) == 2
+def get(port, path):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    try:
+        conn.request("GET", path)
+        response = conn.getresponse()
+        return response.status, response.read()
+    finally:
+        conn.close()
+
+
+@pytest.mark.loopback
+def test_serve_answers_at_the_address_it_prints_and_stops_cleanly(capsys, monkeypatch, tmp_path):
+    web = tmp_path / "web"
+    web.mkdir()
+    page = b"<!doctype html><title>Offer Checkpost</title>\n"
+    (web / "index.html").write_bytes(page)
+    monkeypatch.setattr(server, "WEB_DIR", web)
+    started, ready, codes = [], threading.Event(), []
+
+    def make_server(*args, **kwargs):
+        started.append(server.make_server(*args, **kwargs))
+        ready.set()
+        return started[-1]
+
+    monkeypatch.setattr(cli, "make_server", make_server)
+    serving = threading.Thread(
+        target=lambda: codes.append(cli.main(["serve", "--port", "0", "--provider", "fake"], {}))
+    )
+    serving.start()
+    try:
+        assert ready.wait(10)
+        port = started[0].port
+        answered = get(port, "/")
+    finally:
+        if started:
+            started[0].shutdown()
+        serving.join(10)
+
+    assert not serving.is_alive()
+    assert codes == [0]
+    assert answered == (200, page)
     out, err = capsys.readouterr()
-    assert out == ""
-    assert err == "offer_checkpost: serve is not built yet: the web UI arrives in the next slice\n"
+    assert (out, err) == (f"Offer Checkpost on http://127.0.0.1:{port} · provider fake\n", "")
+
+
+@pytest.mark.loopback
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Ctrl-C on Windows is a console event, not a signal to send"
+)
+def test_serve_from_python_dash_m_stops_on_ctrl_c_with_exit_code_0():
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("SERPAPI_KEY", "PORT") and not k.startswith("OFFER_CHECKPOST_")
+    }
+    env["PYTHONPATH"] = str(ENTRY / "src")
+    serving = subprocess.Popen(
+        [sys.executable, "-m", "offer_checkpost", "serve", "--port", "0", "--provider", "fake"],
+        cwd=ENTRY,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        # A runner started in the background can pass SIGINT on ignored; Python then never
+        # turns it into KeyboardInterrupt.
+        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
+    )
+    try:
+        line = serving.stdout.readline()
+        match = re.fullmatch(
+            r"Offer Checkpost on http://127\.0\.0\.1:(\d+) · provider fake\n", line
+        )
+        assert match, line
+        status, body = get(int(match[1]), "/api/tools")
+        serving.send_signal(signal.SIGINT)
+        out, err = serving.communicate(timeout=10)
+    finally:
+        if serving.poll() is None:
+            serving.kill()
+            serving.communicate()
+
+    assert status == 200 and json.loads(body)[0]["name"] == "open_case"
+    assert (serving.returncode, out, err) == (0, "", "")
+
+
+def test_serve_says_so_when_the_port_is_taken(capsys):
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        code = cli.main(["serve", "--port", str(port), "--provider", "fake"], {})
+    out, err = capsys.readouterr()
+    assert (code, out) == (1, "")
+    assert err.startswith(f"offer_checkpost: cannot listen on 127.0.0.1:{port}: ")
+
+
+def test_the_port_comes_from_the_flag_then_port_then_8741():
+    parser = cli._parser()
+    assert cli._port(parser, 9000, {"PORT": "9100"}) == 9000
+    assert cli._port(parser, None, {"PORT": " 9100 "}) == 9100
+    assert cli._port(parser, None, {"PORT": ""}) == 8741
+    assert cli._port(parser, None, {}) == 8741
+
+
+@pytest.mark.parametrize(
+    ("argv", "environ"),
+    [
+        (["serve", "--port", "70000"], {}),
+        (["serve", "--port", "-1"], {}),
+        (["serve"], {"PORT": "web"}),
+    ],
+)
+def test_a_port_that_is_not_one_is_a_usage_error(capsys, argv, environ):
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(argv, environ)
+    assert exit_.value.code == 2
+    assert "the port must be a whole number from 0 to 65535" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("environ", "says"),
+    [
+        ({"OFFER_CHECKPOST_PROVIDER": "live"}, "SERPAPI_KEY is not set"),
+        ({"OFFER_CHECKPOST_PROVIDER": "bogus"}, "must be live, replay or fake, not 'bogus'"),
+        ({"OFFER_CHECKPOST_MAX_SEARCHES": "six"}, "OFFER_CHECKPOST_MAX_SEARCHES must be a whole"),
+        ({"OFFER_CHECKPOST_QUOTA_RESERVE": "-1"}, "OFFER_CHECKPOST_QUOTA_RESERVE must be a whole"),
+    ],
+)
+@pytest.mark.parametrize(
+    "command", [["serve", "--port", "0"], ["investigate", str(SAMPLES / "a.txt")]]
+)
+def test_a_bad_setting_is_a_one_line_usage_error_not_a_traceback(capsys, command, environ, says):
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(command, environ)
+    assert exit_.value.code == 2
+    err = capsys.readouterr().err
+    assert says in err
+    assert "Traceback" not in err
 
 
 def test_a_command_is_required_and_help_names_both(capsys):
@@ -218,3 +358,49 @@ def test_python_dash_m_runs_the_cli():
     assert "step 2   find_fraud_notice · google (fake, cache miss) · 1 search · agent" in (
         done.stdout
     )
+
+
+def test_settings_are_the_environment_over_dotenv(tmp_path):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "# Offer Checkpost settings\n"
+        "\n"
+        "SERPAPI_KEY=\n"
+        'OFFER_CHECKPOST_PROVIDER="fake"\n'
+        "export OFFER_CHECKPOST_MAX_SEARCHES = 4\n"
+        "PORT=9001\n"
+        "# PORT=9002\n"
+        "not a setting\n",
+        encoding="utf-8",
+    )
+    got = cli.settings({"PORT": "9100", "HOME": "/home/student"}, dotenv)
+    assert got == {
+        "SERPAPI_KEY": "",
+        "OFFER_CHECKPOST_PROVIDER": "fake",
+        "OFFER_CHECKPOST_MAX_SEARCHES": "4",
+        "PORT": "9100",
+        "HOME": "/home/student",
+    }
+    assert cli.settings({"PORT": "9100"}, tmp_path / "absent") == {"PORT": "9100"}
+
+
+def test_python_dash_m_reads_dotenv_in_the_working_directory(tmp_path):
+    (tmp_path / ".env").write_text("OFFER_CHECKPOST_PROVIDER=fake\n", encoding="utf-8")
+    (tmp_path / "a.txt").write_bytes((SAMPLES / "a.txt").read_bytes())
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k != "SERPAPI_KEY" and not k.startswith("OFFER_CHECKPOST_")
+    }
+    env["PYTHONPATH"] = str(ENTRY / "src")
+    done = subprocess.run(
+        [sys.executable, "-m", "offer_checkpost", "investigate", "a.txt"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith("Offer Checkpost · investigate a.txt · provider fake · as human")

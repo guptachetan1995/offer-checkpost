@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Offer Checkpost</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1b18'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' fill='none' stroke='%23fbfaf7' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the case</a>
+
+<div class="top" id="top">
+  <header class="masthead">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect width="32" height="32" rx="8" fill="currentColor"/>
+        <path class="logo-check" d="M9 16.5l4.5 4.5L23 11.5" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <h1 class="name">Offer Checkpost</h1>
+        <p class="tagline">Checks a job offer's claims against search results before anyone pays</p>
+      </div>
+    </div>
+    <ul class="badges" aria-label="Where this app runs">
+      <li><span class="badge bind" title="This app listens on this machine only"><span class="dot" aria-hidden="true"></span><span class="sr-only">Serving on </span><span id="bind">…</span></span></li>
+      <li><span class="badge provider" id="provider">…</span></li>
+      <li><span class="badge budget" id="budget" hidden></span></li>
+    </ul>
+  </header>
+
+  <section class="strip" aria-labelledby="strip-h">
+    <div class="strip-head">
+      <h2 class="strip-title" id="strip-h">SerpApi call log</h2>
+      <p class="strip-bind"><span class="dot" aria-hidden="true"></span><span id="strip-bind">…</span></p>
+      <p class="strip-count" id="strip-count"></p>
+    </div>
+    <ol class="calls" id="calls" tabindex="0" aria-label="One line per SerpApi call, oldest first"></ol>
+  </section>
+</div>
+
+<p class="notice" id="notice" role="alert" hidden></p>
+<p class="replay-note" id="replay" hidden></p>
+
+<main id="main" class="layout">
+  <nav class="casebar" id="casebar" aria-labelledby="casebar-h" hidden></nav>
+
+  <div class="side" id="side">
+    <section class="card paste" id="paste" aria-labelledby="paste-h">
+      <h2 id="paste-h">Paste the offer</h2>
+      <p class="sub">The message a student forwarded, exactly as it arrived on WhatsApp, Telegram or email.</p>
+      <form id="paste-form" novalidate>
+        <div class="field">
+          <div class="field-head">
+            <label for="offer-text">Offer message</label>
+            <span class="count num" id="offer-count">0 / 20,000</span>
+          </div>
+          <textarea id="offer-text" name="text" rows="10" maxlength="20000" spellcheck="false" autocomplete="off" data-focus="offer-text" placeholder="Paste the message here"></textarea>
+        </div>
+        <div class="paste-actions">
+          <div class="field sample" id="sample-wrap" hidden>
+            <label for="sample">Try a sample</label>
+            <select id="sample" data-focus="sample">
+              <option value="">Choose a sample…</option>
+            </select>
+          </div>
+          <button type="submit" class="btn primary" id="open-case" data-focus="open-case" disabled>Open case</button>
+        </div>
+        <div id="paste-slot"></div>
+      </form>
+      <p class="fine">Opening a case searches nothing. The text stays in this app's memory, on this machine.</p>
+    </section>
+    <div id="claims"></div>
+  </div>
+
+  <div class="primary" id="case"></div>
+
+  <div class="lower">
+    <section class="card board" id="board" aria-labelledby="board-h"></section>
+    <section class="card activity" id="activity" aria-labelledby="activity-h"></section>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>Runs on this machine only, on 127.0.0.1. Everything is kept in memory and is gone when the app stops.</p>
+  <p id="tools-line"></p>
+</footer>
+
+<div class="sr-only" id="announce" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -4,18 +4,23 @@ decided, and spending searches past a decisive result.
 None of these is ever registered as a tool, so no agent's tool list shows them, and ``invoke``
 refuses each one for any actor but ``"human"`` before its handler runs. The agent drafts; a
 person decides and publishes.
+
+A person publishes the case as they read it: ``publish_verdict`` names the case ``revision``
+the page showed, and is refused when anything has changed since (a correction, or a check by
+anyone), or when the draft verdict is older than the case. What goes on the board is then a
+snapshot of that draft's claims and evidence, which nothing done to the case afterwards can
+rewrite.
 """
 
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass
 from typing import Any
 
 from offer_checkpost import drafts, planner
 from offer_checkpost.rules import TEXT_SOURCE
 from offer_checkpost.store import OUTCOMES, Refused
-from offer_checkpost.tools import CASE_ID, Call, Handler, obj, runner
+from offer_checkpost.tools import CASE_ID, Call, Handler, changeable, obj, runner
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,27 @@ def search_evidence(case: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _no_search_evidence(case: dict[str, Any]) -> str:
+    """Why ``case`` has no search evidence to publish, and what, if anything, would give it
+    some."""
+    none = f"{case['id']} has no evidence from a search result, only the message's own text"
+    if not case["trace"]:
+        return f"{none}; investigate it before publishing a verdict"
+    stopped = case["budget"]["stoppedBecause"]
+    if stopped == "no_company":
+        return (
+            f"{none}: the message names no company, so there is nothing a search can check, and "
+            "a verdict on the text alone does not go on the Offer Board. Its recruiter reply and "
+            "1930 summary can still be drafted"
+        )
+    if stopped == "search_error":
+        return f"{none}: a search failed and nothing was made up; investigate it again to retry"
+    return (
+        f"{none}: a claim was corrected, so what the searches found is set aside; confirm the "
+        "claims and investigate it again"
+    )
+
+
 def _publish_verdict(call: Call, args: dict[str, Any]) -> dict[str, Any]:
     store = call.store
     case = store.case(args["case_id"])
@@ -43,24 +69,30 @@ def _publish_verdict(call: Call, args: dict[str, Any]) -> dict[str, Any]:
         raise Refused(
             f"{case['id']} is already on the Offer Board; retract it before publishing again"
         )
-    evidence = search_evidence(case)
-    if not evidence:
+    if not search_evidence(case):
+        raise Refused(_no_search_evidence(case))
+    if args["revision"] != case["revision"]:
         raise Refused(
-            f"{case['id']} has no evidence from a search result, only the message's own text; "
-            "investigate it before publishing a verdict"
+            f"{case['id']} has changed since it was read (a claim was corrected, or a check "
+            "ran): read it again, then publish"
         )
     draft = case["draftVerdict"]
-    post = {
-        "caseId": case["id"],
-        "label": args["label"],
-        "note": args["note"],
-        "band": draft["band"] if draft else None,
-        # A snapshot: a later correction marks the case's signals stale, not the post's.
-        "evidence": copy.deepcopy(evidence),
-        "publishedAt": store.now(),
-        "by": call.actor,
-    }
-    post["whatsapp"] = drafts.whatsapp_text(copy.deepcopy(case), copy.deepcopy(post))
+    if draft is None:
+        raise Refused(f"{case['id']} has no draft verdict: draft it, read it, then publish")
+    if drafts.verdict(case, drafted_at=draft["draftedAt"]) != draft:
+        raise Refused(
+            f"{case['id']}'s draft verdict is older than the case (a claim was corrected, or a "
+            "check ran, after it): draft the verdict again, read it, then publish"
+        )
+    if misfit := drafts.label_misfit(args["label"], draft["band"]):
+        raise Refused(misfit)
+    post = drafts.post(
+        case,
+        label=args["label"],
+        note=args["note"],
+        published_at=store.now(),
+        by=call.actor,
+    )
     store.board.append(post)
     case["publishedVerdict"] = post
     case["status"] = "published"
@@ -93,14 +125,17 @@ def _record_outcome(call: Call, args: dict[str, Any]) -> dict[str, Any]:
 
 def _run_remaining_checks(call: Call, args: dict[str, Any]) -> dict[str, Any]:
     store = call.store
-    return planner.run_remaining_checks(
-        store.case(args["case_id"]),
+    case = changeable(store, args["case_id"])
+    result = planner.run_remaining_checks(
+        case,
         store.provider,
         actor=call.actor,
         # Searches a person asked for are the person's, in the trace and the activity log.
         runner=runner(store, call.actor),
         environ=store.planner_settings,
     )
+    case["revision"] += 1
+    return result
 
 
 _VERBS = (
@@ -112,10 +147,16 @@ _VERBS = (
                 "case_id": CASE_ID,
                 "label": {"type": "string", "enum": list(drafts.BOARD_LABELS)},
                 "note": {"type": "string", "maxLength": 1000},
+                "revision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The case's revision as the person read it.",
+                },
             },
             "case_id",
             "label",
             "note",
+            "revision",
         ),
         _publish_verdict,
     ),
