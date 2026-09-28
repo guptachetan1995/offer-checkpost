@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "offer-checkpost"
+dynamic = ["version"]
+description = "Checks a job offer's claims against live SerpApi results before anyone pays."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+  "serpapi==1.1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "ruff==0.16.9",
+  "playwright==1.63.0",
+]
+
+[tool.hatch.version]
+path = "src/offer_checkpost/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/offer_checkpost"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The checkout's own src/ comes first, so a copy that reuses another checkout's .venv tests
+# its own code, not the editable install's.
+pythonpath = ["src"]
+addopts = "-q"
+markers = [
+  "live: calls the real SerpApi with SERPAPI_KEY and spends a search; runs only with -m live",
+]
+
+[tool.ruff]
+line-length = 99
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,19 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional.",
+  "knowledge_graph": {
+    "title": "Contoso",
+    "website": "https://www.contoso.example/"
+  },
+  "organic_results": [
+    {
+      "title": "Contoso - Engineering and Manufacturing",
+      "link": "https://www.contoso.example/",
+      "snippet": "Contoso designs industrial pumps and runs plants in Pune and Chennai."
+    },
+    {
+      "title": "Campus Hiring | Contoso Careers",
+      "link": "https://careers.contoso.example/campus",
+      "snippet": "Graduate Engineer Trainee openings for the 2026 batch."
+    }
+  ]
+}

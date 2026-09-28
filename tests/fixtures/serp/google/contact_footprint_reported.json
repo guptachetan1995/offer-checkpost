@@ -1,0 +1,15 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional.",
+  "organic_results": [
+    {
+      "title": "Offer letter from QuickHire Desk?",
+      "link": "https://forum.example/t/quickhire-desk",
+      "snippet": "Has anyone joined QuickHire Desk? Their HR mail looks official."
+    },
+    {
+      "title": "Job scam alert: fake HR asking for fees",
+      "link": "https://forum.example/t/job-scam-hr-desk",
+      "snippet": "Got a mail from hr.desk@quickhire.example asking for a 2,000 registration fee. It is a scam, do not pay."
+    }
+  ]
+}

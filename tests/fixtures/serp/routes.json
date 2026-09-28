@@ -1,0 +1,156 @@
+[
+  {
+    "sample": "a",
+    "check": "lookup_official_site",
+    "params": {
+      "engine": "google",
+      "q": "Brand",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Noida, India",
+      "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+    },
+    "fixture": "google/official_site_brand.json"
+  },
+  {
+    "sample": "a",
+    "check": "find_fraud_notice",
+    "params": {
+      "engine": "google",
+      "q": "site:brand.example (fraud OR fake OR scam OR beware) (recruitment OR job OR offer OR hiring)",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Noida, India",
+      "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+    },
+    "fixture": "google/fraud_notice_fee.json"
+  },
+  {
+    "sample": "a",
+    "check": "confirm_sender_domain",
+    "params": {
+      "engine": "google",
+      "q": "site:brand.example \"brand-careers.example\"",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Noida, India",
+      "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+    },
+    "fixture": "google/confirm_named_in_notice.json"
+  },
+  {
+    "sample": "b",
+    "check": "lookup_official_site",
+    "params": {
+      "engine": "google",
+      "q": "Contoso",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Pune, India",
+      "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+    },
+    "fixture": "google/official_site_contoso.json"
+  },
+  {
+    "sample": "b",
+    "check": "check_job_listings",
+    "params": {
+      "engine": "google_jobs",
+      "q": "Graduate Engineer Trainee Contoso",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Pune, India",
+      "json_restrictor": "jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}"
+    },
+    "fixture": "google_jobs/listings_contoso.json"
+  },
+  {
+    "sample": "b",
+    "check": "check_office",
+    "params": {
+      "engine": "google_maps",
+      "type": "search",
+      "q": "Contoso",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Pune, India",
+      "z": "12",
+      "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+    },
+    "fixture": "google_maps/office_contoso_local.json"
+  },
+  {
+    "sample": "b",
+    "check": "check_scam_reports",
+    "params": {
+      "engine": "google_news",
+      "q": "\"Contoso\" job offer (fake OR scam OR fraud)",
+      "gl": "in",
+      "hl": "en",
+      "json_restrictor": "news_results[].{title,link,source.name,date}"
+    },
+    "fixture": "google_news/reports_contoso.json"
+  },
+  {
+    "sample": "c",
+    "check": "lookup_official_site",
+    "params": {
+      "engine": "google",
+      "q": "Zorvanta Support Services",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Indore, India",
+      "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+    },
+    "fixture": "google/official_site_no_footprint.json"
+  },
+  {
+    "sample": "c",
+    "check": "check_office",
+    "params": {
+      "engine": "google_maps",
+      "type": "search",
+      "q": "Zorvanta Support Services",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Indore, India",
+      "z": "12",
+      "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+    },
+    "fixture": "google_maps/office_not_found_indore.json"
+  },
+  {
+    "sample": "c",
+    "check": "check_job_listings",
+    "params": {
+      "engine": "google_jobs",
+      "q": "Customer Support Executive",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Indore, India",
+      "json_restrictor": "jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}"
+    },
+    "fixture": "google_jobs/listings_customer_support_indore.json"
+  },
+  {
+    "sample": "c",
+    "check": "check_scam_reports",
+    "params": {
+      "engine": "google_news",
+      "q": "\"Zorvanta Support Services\" job offer (fake OR scam OR fraud)",
+      "gl": "in",
+      "hl": "en",
+      "json_restrictor": "news_results[].{title,link,source.name,date}"
+    },
+    "fixture": "google_news/reports_empty.json"
+  }
+]

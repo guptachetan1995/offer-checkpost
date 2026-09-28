@@ -1,0 +1,10 @@
+# Development: the runtime pin plus the test runner, the linter and the browser driver for
+# the end-to-end test and the demo recording.
+-r requirements.txt
+pytest==9.1.1
+ruff==0.16.9
+playwright==1.63.0
+# pytest needs colorama on Windows only. pip-compile drops a marker-gated dependency the
+# locking machine doesn't need, and hash mode then refuses the Windows install, so it is
+# pinned here unconditionally; it is pure Python and inert elsewhere.
+colorama==0.4.6

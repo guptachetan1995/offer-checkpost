@@ -1,0 +1,21 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_maps response trimmed by json_restrictor to local_results[] or place_results with {title,place_id,type,address,rating,reviews}. Every name, domain and place in it is fictional.",
+  "local_results": [
+    {
+      "title": "Orvex Call Centre",
+      "place_id": "ChIJsyntheticOrvexIndore1",
+      "type": "Call center",
+      "address": "Vijay Nagar, Indore, Madhya Pradesh 452010",
+      "rating": 3.6,
+      "reviews": 22
+    },
+    {
+      "title": "Tarsik BPO Services",
+      "place_id": "ChIJsyntheticTarsikIndore1",
+      "type": "Business to business service",
+      "address": "AB Road, Indore, Madhya Pradesh 452001",
+      "rating": 4.1,
+      "reviews": 64
+    }
+  ]
+}

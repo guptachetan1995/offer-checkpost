@@ -1,0 +1,29 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_maps response trimmed by json_restrictor to local_results[] or place_results with {title,place_id,type,address,rating,reviews}. Every name, domain and place in it is fictional.",
+  "local_results": [
+    {
+      "title": "Velmora Engineering",
+      "place_id": "ChIJsyntheticVelmoraPune01",
+      "type": "Engineering consultant",
+      "address": "Hinjewadi Phase 1, Pune, Maharashtra 411057",
+      "rating": 4.0,
+      "reviews": 57
+    },
+    {
+      "title": "Contoso Service Centre",
+      "place_id": "ChIJsyntheticContosoMumbai1",
+      "type": "Corporate office",
+      "address": "Andheri East, Mumbai, Maharashtra 400069",
+      "rating": 3.9,
+      "reviews": 41
+    },
+    {
+      "title": "Contoso Pune Office",
+      "place_id": "ChIJsyntheticContosoPune01",
+      "type": "Corporate office",
+      "address": "Hinjewadi Phase 2, Pune, Maharashtra 411057",
+      "rating": 4.2,
+      "reviews": 318
+    }
+  ]
+}

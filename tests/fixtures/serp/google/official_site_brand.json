@@ -1,0 +1,24 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional.",
+  "knowledge_graph": {
+    "title": "Brand",
+    "website": "https://www.brand.example/"
+  },
+  "organic_results": [
+    {
+      "title": "Brand | Official Site",
+      "link": "https://www.brand.example/",
+      "snippet": "Brand builds consumer electronics and runs service centres across India."
+    },
+    {
+      "title": "Careers at Brand",
+      "link": "https://careers.brand.example/",
+      "snippet": "Explore open roles at Brand. Apply only through this site."
+    },
+    {
+      "title": "Brand - Encyclopedia",
+      "link": "https://encyclopedia.example/wiki/Brand",
+      "snippet": "Brand is a consumer electronics company founded in 1987."
+    }
+  ]
+}

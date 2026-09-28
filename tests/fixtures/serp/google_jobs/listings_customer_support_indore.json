@@ -1,0 +1,99 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_jobs response trimmed by json_restrictor to jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}. Every name, domain and place in it is fictional.",
+  "jobs_results": [
+    {
+      "title": "Customer Support Executive",
+      "company_name": "Velmora Services",
+      "location": "Indore, Madhya Pradesh, India",
+      "detected_extensions": {
+        "salary": "₹15K–₹18K a month"
+      },
+      "extensions": [
+        "Full-time",
+        "₹15K–₹18K a month"
+      ],
+      "description": "Handle customer calls and chats for an e-commerce client.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/velmora-cse-indore"
+        }
+      ]
+    },
+    {
+      "title": "Customer Support Associate",
+      "company_name": "Tarsik BPO",
+      "location": "Indore, Madhya Pradesh, India",
+      "extensions": [
+        "Full-time",
+        "₹14,000–₹16,000 a month"
+      ],
+      "description": "Voice process, rotational shifts.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/tarsik-csa"
+        }
+      ]
+    },
+    {
+      "title": "Customer Care Executive",
+      "company_name": "Quillon Retail",
+      "location": "Indore, Madhya Pradesh, India",
+      "extensions": [
+        "Full-time"
+      ],
+      "description": "Answer customer queries in Hindi and English. Salary: ₹16,000 - ₹20,000 per month plus incentives.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/quillon-cce"
+        }
+      ]
+    },
+    {
+      "title": "Customer Support Executive (Voice)",
+      "company_name": "Ardent Callworks",
+      "location": "Indore, Madhya Pradesh, India",
+      "detected_extensions": {
+        "salary": "₹18K–₹22K a month"
+      },
+      "extensions": [
+        "Full-time",
+        "₹18K–₹22K a month"
+      ],
+      "description": "Inbound voice process for a telecom client.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/ardent-cse"
+        }
+      ]
+    },
+    {
+      "title": "Customer Support Executive",
+      "company_name": "Nimbal Tech",
+      "location": "Indore, Madhya Pradesh, India",
+      "extensions": [
+        "Full-time"
+      ],
+      "description": "Email and chat support. Graduates preferred.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/nimbal-cse"
+        }
+      ]
+    },
+    {
+      "title": "Chat Support Executive",
+      "company_name": "Orvex Digital",
+      "location": "Indore, Madhya Pradesh, India",
+      "extensions": [
+        "Full-time",
+        "Work from home"
+      ],
+      "description": "Chat support for an online store.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/orvex-chat"
+        }
+      ]
+    }
+  ]
+}

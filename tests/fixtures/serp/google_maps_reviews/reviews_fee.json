@@ -1,0 +1,23 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_maps_reviews response trimmed by json_restrictor to reviews[].{snippet,rating,iso_date,link}. Every name, domain and place in it is fictional.",
+  "reviews": [
+    {
+      "snippet": "Clean office and a polite front desk.",
+      "rating": 4,
+      "iso_date": "2026-07-02T11:20:00Z",
+      "link": "https://www.google.com/maps/reviews/data=!synthetic-review-001"
+    },
+    {
+      "snippet": "They asked me to pay a registration fee of Rs 2,000 before the interview. I walked out.",
+      "rating": 1,
+      "iso_date": "2026-08-14T09:30:00Z",
+      "link": "https://www.google.com/maps/reviews/data=!synthetic-review-002"
+    },
+    {
+      "snippet": "Fees for the training were demanded on day one.",
+      "rating": 1,
+      "iso_date": "2026-08-21T16:05:00Z",
+      "link": "https://www.google.com/maps/reviews/data=!synthetic-review-003"
+    }
+  ]
+}

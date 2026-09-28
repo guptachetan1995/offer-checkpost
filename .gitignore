@@ -1,0 +1,16 @@
+# Secrets: the SerpApi key lives in .env and must never be committed.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+.venv-tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local search cache and demo recording output
+.cache/
+out/

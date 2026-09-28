@@ -1,0 +1,59 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_jobs response trimmed by json_restrictor to jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}. Every name, domain and place in it is fictional.",
+  "jobs_results": [
+    {
+      "title": "Graduate Engineer Trainee",
+      "company_name": "Contoso",
+      "location": "Pune, Maharashtra, India",
+      "detected_extensions": {
+        "salary": "₹3.5L–₹4.5L a year"
+      },
+      "extensions": [
+        "Full-time",
+        "₹3.5L–₹4.5L a year"
+      ],
+      "description": "Contoso is hiring Graduate Engineer Trainees for its Pune plant.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/contoso-get-pune"
+        },
+        {
+          "link": "https://careers.contoso.example/jobs/graduate-engineer-trainee-pune"
+        }
+      ]
+    },
+    {
+      "title": "Graduate Engineer Trainee - Mechanical",
+      "company_name": "Velmora Engineering",
+      "location": "Chakan, Maharashtra, India",
+      "detected_extensions": {
+        "salary": "₹3L–₹4L a year"
+      },
+      "extensions": [
+        "Full-time",
+        "₹3L–₹4L a year"
+      ],
+      "description": "Diploma or B.E. in mechanical engineering.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/velmora-get"
+        }
+      ]
+    },
+    {
+      "title": "Trainee Engineer",
+      "company_name": "Tarsik Systems",
+      "location": "Pune, Maharashtra, India",
+      "extensions": [
+        "Full-time",
+        "₹25K–₹30K a month"
+      ],
+      "description": "Trainee engineers for automation projects.",
+      "apply_options": [
+        {
+          "link": "https://jobs.portal.example/tarsik-trainee"
+        }
+      ]
+    }
+  ]
+}

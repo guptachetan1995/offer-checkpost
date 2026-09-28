@@ -1,0 +1,21 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_news response trimmed by json_restrictor to news_results[].{title,link,source.name,date}. Every name, domain and place in it is fictional.",
+  "news_results": [
+    {
+      "title": "Contoso to hire 400 graduate engineers for its Pune plant",
+      "link": "https://business-daily.example/2026/09/contoso-pune-hiring",
+      "source": {
+        "name": "Example Business Daily"
+      },
+      "date": "09/15/2026, 06:30 AM, +0000 UTC"
+    },
+    {
+      "title": "Fake Contoso job offers ask graduates for a joining fee, company warns",
+      "link": "https://city-news.example/2026/08/fake-contoso-offers",
+      "source": {
+        "name": "Example City News"
+      },
+      "date": "08/22/2026, 09:00 AM, +0000 UTC"
+    }
+  ]
+}

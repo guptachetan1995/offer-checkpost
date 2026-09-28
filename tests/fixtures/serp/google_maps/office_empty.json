@@ -1,0 +1,3 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_maps response trimmed by json_restrictor to local_results[] or place_results with {title,place_id,type,address,rating,reviews}. Every name, domain and place in it is fictional."
+}

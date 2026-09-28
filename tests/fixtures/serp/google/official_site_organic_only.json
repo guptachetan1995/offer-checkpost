@@ -1,0 +1,15 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional.",
+  "organic_results": [
+    {
+      "title": "Hexavara Foods Chennai - Business Directory",
+      "link": "https://directory.example/chennai/hexavara-foods",
+      "snippet": "Hexavara Foods, T. Nagar, Chennai. Snacks wholesaler."
+    },
+    {
+      "title": "Hexavara Foods - Fresh Snacks Since 1998",
+      "link": "https://hexavara.example/about",
+      "snippet": "Hexavara Foods makes and sells savoury snacks across Tamil Nadu."
+    }
+  ]
+}

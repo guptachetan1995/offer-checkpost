@@ -1,0 +1,29 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_news response trimmed by json_restrictor to news_results[].{title,link,source.name,date}. Every name, domain and place in it is fictional.",
+  "news_results": [
+    {
+      "title": "Brand opens a new service campus in Hyderabad",
+      "link": "https://business-daily.example/2026/09/brand-hyderabad-campus",
+      "source": {
+        "name": "Example Business Daily"
+      },
+      "date": "09/20/2026, 07:00 AM, +0000 UTC"
+    },
+    {
+      "title": "Fake job offers in Brand's name: police warn job seekers in Noida",
+      "link": "https://times.example/2026/09/fake-brand-job-offers",
+      "source": {
+        "name": "The Example Times"
+      },
+      "date": "09/12/2026, 05:30 AM, +0000 UTC"
+    },
+    {
+      "title": "Fraudsters posing as Brand recruiters dupe 40 freshers",
+      "link": "https://city-news.example/2026/08/brand-recruiter-fraud",
+      "source": {
+        "name": "Example City News"
+      },
+      "date": "08/30/2026, 10:15 AM, +0000 UTC"
+    }
+  ]
+}

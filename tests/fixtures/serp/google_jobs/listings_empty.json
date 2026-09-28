@@ -1,0 +1,3 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_jobs response trimmed by json_restrictor to jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}. Every name, domain and place in it is fictional."
+}

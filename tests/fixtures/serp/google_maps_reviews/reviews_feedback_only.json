@@ -1,0 +1,11 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_maps_reviews response trimmed by json_restrictor to reviews[].{snippet,rating,iso_date,link}. Every name, domain and place in it is fictional.",
+  "reviews": [
+    {
+      "snippet": "Quick feedback after the interview and no charges of any kind.",
+      "rating": 5,
+      "iso_date": "2026-06-11T08:00:00Z",
+      "link": "https://www.google.com/maps/reviews/data=!synthetic-review-004"
+    }
+  ]
+}

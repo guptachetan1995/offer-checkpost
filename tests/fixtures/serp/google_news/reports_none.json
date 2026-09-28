@@ -1,0 +1,21 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google_news response trimmed by json_restrictor to news_results[].{title,link,source.name,date}. Every name, domain and place in it is fictional.",
+  "news_results": [
+    {
+      "title": "Brand opens a new service campus in Hyderabad",
+      "link": "https://business-daily.example/2026/09/brand-hyderabad-campus",
+      "source": {
+        "name": "Example Business Daily"
+      },
+      "date": "09/20/2026, 07:00 AM, +0000 UTC"
+    },
+    {
+      "title": "Online shopping fraud: how to stay safe this festive season",
+      "link": "https://times.example/2026/09/festive-shopping-fraud",
+      "source": {
+        "name": "The Example Times"
+      },
+      "date": "09/18/2026, 06:00 AM, +0000 UTC"
+    }
+  ]
+}

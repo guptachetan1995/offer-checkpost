@@ -1,0 +1,2 @@
+# Runtime: SerpApi's official Python client, the only runtime dependency.
+serpapi==1.1.2
