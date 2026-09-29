@@ -643,7 +643,7 @@ def _consider(case: Case, ctx: _Context, tool: str, extra: Mapping[str, Any]) ->
             reasons.append("a fee was asked")
         if _fired(case, "sensitive_docs_early"):
             reasons.append("sensitive documents were asked for")
-        if _sender_off_official(case):
+        if _sender_off_official(case, ctx.official):
             reasons.append("the recruiter's email or link is not on the official domain")
         if not reasons:
             return (
@@ -1060,9 +1060,13 @@ def _fee_asked(case: Case) -> bool:
     return case["claims"].get("fee") is not None
 
 
-def _sender_off_official(case: Case) -> bool:
-    # With no recruiter email or link there is no sender domain to call unofficial.
-    return bool(_offer_domains(case["claims"])) and not _fired(case, "sender_official")
+def _sender_off_official(case: Case, official: str) -> bool:
+    # A recruiter email or link on another registrable domain, unless sender_official vouched
+    # for the sender anyway (the employer's own second domain). With no recruiter email or
+    # link there is no sender domain to call unofficial. sender_official alone can't decide
+    # it: with no knowledge graph it never fires, even for a link on the official domain.
+    off = _offer_domains(case["claims"]) - {official}
+    return bool(off) and not _fired(case, "sender_official")
 
 
 def _offer_domains(claims: Mapping[str, Any]) -> set[str]:

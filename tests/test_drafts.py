@@ -32,6 +32,9 @@ from offer_checkpost.providers import FakeSearchProvider
 from offer_checkpost.rules import RULES, signal_for, text_signal
 
 SAMPLES_DIR = Path(__file__).resolve().parents[1] / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer; any
+# other sample is read from samples/offers.
+STAND_INS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "offers"
 NOW = 1_791_000_000.0  # 3 Oct 2026, 04:00 UTC: when the fake provider says it searched
 CREATED_AT = "2026-10-06T10:02:11+05:30"
 DRAFTED_AT = "2026-10-06T10:03:00+05:30"
@@ -45,7 +48,9 @@ NEVER_SAID = re.compile(r"\b(?:genuine|safe)\b", re.I)
 
 class Builder:
     def __init__(self, sample: str, case_id: str = "case_001"):
-        text = (SAMPLES_DIR / f"{sample}.txt").read_text(encoding="utf-8")
+        stand_in = STAND_INS / f"{sample}.txt"
+        path = stand_in if stand_in.exists() else SAMPLES_DIR / f"{sample}.txt"
+        text = path.read_text(encoding="utf-8")
         claims = extract_claims(text)
         for name in ("company", "role", "city", "pay", "fee"):
             if claims[name] is not None:

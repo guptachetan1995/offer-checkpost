@@ -25,6 +25,9 @@ from offer_checkpost.store import IST, Store
 from offer_checkpost.tools import listing
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer; any
+# other sample is read from samples/offers.
+STAND_INS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "offers"
 ROUTES = json.loads((FIXTURES_DIR / ROUTES_FILE).read_text(encoding="utf-8"))
 NOW = datetime(2026, 10, 6, 10, 2, 11, tzinfo=IST)
 NEVER_SAID = re.compile(r"\b(genuine|safe)\b", re.I)
@@ -49,8 +52,13 @@ def refusal(store, tool, args, actor="agent"):
     return out["error"]
 
 
+def sample_text(name):
+    stand_in = STAND_INS / f"{name}.txt"
+    return (stand_in if stand_in.exists() else SAMPLES / f"{name}.txt").read_text(encoding="utf-8")
+
+
 def agent_investigates(store, name):
-    text = (SAMPLES / f"{name}.txt").read_text(encoding="utf-8")
+    text = sample_text(name)
     case_id = call(store, "open_case", {"text": text})["id"]
     call(store, "update_claims", {"case_id": case_id, "confirm": True})
     return case_id, call(store, "investigate", {"case_id": case_id})
@@ -362,7 +370,7 @@ def test_a_check_called_on_its_own_stops_at_the_budget_and_the_quota_guard():
     account = {**FAKE_ACCOUNT, "plan_searches_left": 21}
     provider = FakeSearchProvider.from_fixtures(clock=lambda: NOW.timestamp(), account=account)
     store = Store(provider, max_searches=3, clock=lambda: NOW)
-    text = (SAMPLES / "b.txt").read_text(encoding="utf-8")
+    text = sample_text("b")
     case_id = call(store, "open_case", {"text": text})["id"]
     assert "not confirmed" in refusal(store, "lookup_official_site", {"case_id": case_id})
     call(store, "update_claims", {"case_id": case_id, "confirm": True})
@@ -462,7 +470,7 @@ def test_sample_a_a_copy_that_failed_is_passed_over_for_one_that_finished():
 
 def test_sample_a_at_another_pay_is_not_answered_from_the_first_check(store):
     first, _ = agent_investigates(store, "a")
-    text = (SAMPLES / "a.txt").read_text(encoding="utf-8").replace("₹38,000", "₹16,000")
+    text = sample_text("a").replace("₹38,000", "₹16,000")
     case = call(store, "open_case", {"text": text})
 
     assert case["sameAs"] is None

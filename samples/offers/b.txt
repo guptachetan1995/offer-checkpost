@@ -1,15 +1,13 @@
-Subject: Interview invitation: Graduate Engineer Trainee, Pune
+Subject: Interview invitation: Application Support Engineer, Bengaluru
 
 Hello,
 
-Thank you for applying to Contoso through our careers site. You have been shortlisted for the Graduate Engineer Trainee role at our Pune office (Hinjewadi Phase 2).
+Thank you for applying to Siemens through our careers site. You have been shortlisted for the Application Support Engineer role (Req ID 509009) at our Bengaluru office.
 
-CTC: 4.2 LPA
-Interview: in person on 9 October 2026 at 10:00 am, at the Pune office. Please carry your original documents (Aadhaar, PAN and degree certificates) for verification at the venue.
+Interview: in person at the Bengaluru office. The date and time are on your candidate page on the careers site. Please carry your original documents (Aadhaar, PAN and degree certificates) for verification at the venue.
 
-Contoso does not charge candidates any fee at any stage of hiring.
+Siemens does not charge candidates any fee at any stage of hiring.
 
-Job listing: https://careers.contoso.example/jobs/graduate-engineer-trainee-pune
-Questions: campus.hiring@contoso.example
+Job listing: https://jobs.sw.siemens.com/bangalore-ind/application-support-engineer/EFA2906C942646FCA1909D1C237F55AD/job/
 
-Talent Acquisition, Contoso
+Talent Acquisition, Siemens

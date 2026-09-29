@@ -26,12 +26,13 @@ from offer_checkpost.providers import (
 )
 
 ENTRY = Path(__file__).resolve().parents[1]
-SAMPLES = ENTRY / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
+OFFERS = ENTRY / "tests" / "fixtures" / "offers"
 ROUTES = json.loads((FIXTURES_DIR / ROUTES_FILE).read_text(encoding="utf-8"))
 
 
 def run(capsys, name, *flags, environ=None):
-    code = cli.main(["investigate", str(SAMPLES / f"{name}.txt"), *flags], environ or {})
+    code = cli.main(["investigate", str(OFFERS / f"{name}.txt"), *flags], environ or {})
     out, err = capsys.readouterr()
     return code, out, err
 
@@ -364,7 +365,7 @@ def test_a_port_that_is_not_one_is_a_usage_error(capsys, argv, environ):
     ],
 )
 @pytest.mark.parametrize(
-    "command", [["serve", "--port", "0"], ["investigate", str(SAMPLES / "a.txt")]]
+    "command", [["serve", "--port", "0"], ["investigate", str(OFFERS / "a.txt")]]
 )
 def test_a_bad_setting_is_a_one_line_usage_error_not_a_traceback(capsys, command, environ, says):
     with pytest.raises(SystemExit) as exit_:
@@ -394,7 +395,7 @@ def test_python_dash_m_runs_the_cli():
     }
     env["PYTHONPATH"] = str(ENTRY / "src")
     done = subprocess.run(
-        [sys.executable, "-m", "offer_checkpost", "investigate", "samples/offers/a.txt"]
+        [sys.executable, "-m", "offer_checkpost", "investigate", "tests/fixtures/offers/a.txt"]
         + ["--provider", "fake"],
         cwd=ENTRY,
         env=env,
@@ -435,7 +436,7 @@ def test_settings_are_the_environment_over_dotenv(tmp_path):
 
 def test_python_dash_m_reads_dotenv_in_the_working_directory(tmp_path):
     (tmp_path / ".env").write_text("OFFER_CHECKPOST_PROVIDER=fake\n", encoding="utf-8")
-    (tmp_path / "a.txt").write_bytes((SAMPLES / "a.txt").read_bytes())
+    (tmp_path / "a.txt").write_bytes((OFFERS / "a.txt").read_bytes())
     env = {
         k: v
         for k, v in os.environ.items()

@@ -1,0 +1,178 @@
+{
+  "recordedAt": "2026-09-29T15:06:46+05:30",
+  "engine": "google_maps",
+  "params": {
+    "engine": "google_maps",
+    "type": "search",
+    "q": "HCLTech",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Noida, India",
+    "z": "12",
+    "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+  },
+  "response": {
+    "local_results": [
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJqz-Jq3_nDDkRWXsNjOcS0Eg",
+        "type": "Software company",
+        "address": "Technology Hub (SEZ, Plot No. 3A, Sector 126, Noida, Uttar Pradesh 201303",
+        "rating": 4.5,
+        "reviews": 8277
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJ-5XycaflDDkRXQLLafJ7-Ac",
+        "type": "Software company",
+        "address": "A-5, Vindhyachal Marg, Block A, Sector 24, Noida, Uttar Pradesh 201307",
+        "rating": 4.5,
+        "reviews": 329
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJs3jUjXDlDDkRBzoUe5NJyLs",
+        "type": "Software company",
+        "address": "A- 8 & 9, Sector 60, Noida, Uttar Pradesh 201309",
+        "rating": 4.1,
+        "reviews": 2551
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJX8U4khPlDDkRq_tXADoRFnM",
+        "type": "Software company",
+        "address": "C-22, Block C, Sector 57, Noida, Uttar Pradesh 201309",
+        "rating": 3.9,
+        "reviews": 130
+      },
+      {
+        "title": "HCL Corporation Private Limited",
+        "place_id": "ChIJySyNXV_kDDkRx6Ig5NR5Uqw",
+        "type": "Corporate office",
+        "address": "A9, Block A, Noida Sector 3, Noida, Uttar Pradesh 201301",
+        "rating": 4.3,
+        "reviews": 1126
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJ1ahQtfQZDTkR0HhBA3ADpk4",
+        "type": "Software company",
+        "address": "Tower 11, 1st Floor, Candor Tech Space Gate, Dundahera Village, Sector 21, Gurugram, Haryana 122022",
+        "rating": 4.3,
+        "reviews": 73
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJI4a02BXnDDkRjkHwsa_HJss",
+        "type": "Software company",
+        "address": "Tower B, Lotus Business Park, Plot 8, Bakhtawarpur, Sector 127, Noida, Uttar Pradesh 201304",
+        "rating": 4.6,
+        "reviews": 38
+      },
+      {
+        "title": "HCLTech Tower 5",
+        "place_id": "ChIJQUu7RHnmDDkR69X4stODS-A",
+        "type": "Software company",
+        "address": "HCL Tech, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.6,
+        "reviews": 574
+      },
+      {
+        "title": "HCLTech Tower 3",
+        "place_id": "ChIJ9aq8g3fmDDkRs-xi0iWR0cU",
+        "type": "Corporate office",
+        "address": "Noida-Greater Noida Expy, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.4,
+        "reviews": 1232
+      },
+      {
+        "title": "HCLTech Tower 6",
+        "place_id": "ChIJv9tYSXnmDDkRrdSWpu-DCS0",
+        "type": "Corporate office",
+        "address": "Sector 60, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.5,
+        "reviews": 461
+      },
+      {
+        "title": "HCL Technologies Gate 1",
+        "place_id": "ChIJK7eqcgDnDDkREN456gZa0U8",
+        "type": "Corporate office",
+        "address": "Gate No. 1, HCL, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.6,
+        "reviews": 90
+      },
+      {
+        "title": "HCLTech, Tower 4",
+        "place_id": "ChIJGxmUnnnmDDkR2Hheo67_TFo",
+        "type": "Corporate office",
+        "address": "Tower-4, 3A, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.5,
+        "reviews": 316
+      },
+      {
+        "title": "HCLTech",
+        "place_id": "ChIJD4_2RgDpDDkRpokEgYab6_4",
+        "type": "Corporate office",
+        "address": "Nsl Techzone It Sez, Plot no. 8, Sector 144, Noida, Uttar Pradesh 201306",
+        "rating": 4.5,
+        "reviews": 19
+      },
+      {
+        "title": "HCL",
+        "place_id": "ChIJA25ByXMDDTkRWCWUkEVpNYw",
+        "type": "Software company",
+        "address": "TDI Paragon Mall, Shivaji Place, Basai Dara pur, Tagore Garden Extension, Delhi, 110027",
+        "rating": 4.6,
+        "reviews": 20
+      },
+      {
+        "title": "Hcltech Tower 1",
+        "place_id": "ChIJGWvqdwDnDDkR4MFHmWJwSyQ",
+        "type": "Corporate office",
+        "address": "Tower-1, HCL TECHNOLOGIES-2, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.6,
+        "reviews": 38
+      },
+      {
+        "title": "hcl technologies",
+        "place_id": "ChIJBzRc7ovvDDkRAtvNeaDbXdc",
+        "type": "Software company",
+        "address": "left wing, tower -b, b-39, sector-1, Sector 65, Noida, Uttar Pradesh 201309",
+        "rating": 3.5,
+        "reviews": 35
+      },
+      {
+        "title": "HCL Technologies, Gate 4",
+        "place_id": "ChIJgZmcDADnDDkROxQ3PXmx19E",
+        "type": "Corporate office",
+        "address": "G8RV+48X, subarea, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.3,
+        "reviews": 61
+      },
+      {
+        "title": "HCLTech, SEZ Sector 126, CAB Droping Point",
+        "place_id": "ChIJa7LaKHbnDDkRDvA68-zXzU8",
+        "type": "Parking lot",
+        "address": "G8QQ+C47, Sector 126, Noida, Uttar Pradesh 201313",
+        "rating": 4.3,
+        "reviews": 18
+      },
+      {
+        "title": "HCL TECH, SECTOR 126",
+        "place_id": "ChIJ811vewDpDDkRb6zsnEieb3o",
+        "address": "Plot No 7, Sector 144, Noida, Uttar Pradesh 201306",
+        "rating": 5,
+        "reviews": 1
+      },
+      {
+        "title": "HCL Infinet Limited",
+        "place_id": "ChIJAQAAwOjjDDkRaFRfWmPdiL8",
+        "type": "Software company",
+        "address": "261, Okhla Phase III, Okhla Industrial Estate, New Delhi, Delhi 110020",
+        "rating": 5,
+        "reviews": 3
+      }
+    ]
+  }
+}

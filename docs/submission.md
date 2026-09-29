@@ -92,9 +92,8 @@ recruiter's domain or contact only when one is being checked. The candidate's ow
 never sent. Everything else stays on the machine running it.
 
 Runs locally: Python, on SerpApi's official client. Judges can run it with their own SerpApi
-key, or keyless with --provider fake on synthetic test data. Replay mode, keyless too, serves
-SerpApi responses recorded with a real key and dated; the demo samples' recordings are made
-before submission.
+key, or with no key in replay mode, which serves the three demo samples' real SerpApi
+responses, recorded on 29 September 2026 and labelled with that date.
 
 ## How the project uses SerpApi (max 4,000 characters)
 
@@ -137,12 +136,12 @@ official domain there is no site: search and the office is checked first; with t
 the official domain and no fee asked, the fraud-notice search is skipped; with no Maps place
 there is no reviews query. The planner stops when the evidence is decisive, and the trace
 shows every engine call, why it ran, whether it came from the cache, and the searches saved.
-On the test suite's synthetic fixtures, the impersonation sample stops at 2 of its 6 searches,
-the unknown firm also at 2, and the offer with nothing against it takes 4. With a 6-search cap and a 20-search
+In the recorded demo, the HCLTech impersonation stops at 2 of its 6 searches (4 more if a
+person asks), the unknown firm also at 2 (2 more if asked), and the real Siemens opening takes 4. With a 6-search cap and a 20-search
 reserve, the free plan's 250 searches cover at least 38 checks a month, and the same bulk-sent
 message forwarded again is answered at 0 searches. Live results are cached locally for 24
-hours. Responses recorded for keyless replay are trimmed to these fields, with keys, phone
-numbers, email addresses and people's profiles removed, before they are written.
+hours. Responses recorded for keyless replay keep only these fields, without keys, people's
+profiles, videos or the headlines the app never reads, and with phones and emails masked.
 
 WHERE TO LOOK, by judging criterion (README sections and repository files):
 - Idea strength: the opening lines and "The problem".

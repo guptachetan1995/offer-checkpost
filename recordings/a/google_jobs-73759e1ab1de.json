@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-09-29T15:06:45+05:30",
+  "engine": "google_jobs",
+  "params": {
+    "engine": "google_jobs",
+    "q": "Data Entry Executive HCLTech",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Noida, India",
+    "json_restrictor": "jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}"
+  },
+  "response": {}
+}

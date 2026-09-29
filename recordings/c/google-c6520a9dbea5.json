@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-09-29T13:36:51+05:30",
+  "engine": "google",
+  "params": {
+    "engine": "google",
+    "q": "Kavrellon Support Services",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Indore, India",
+    "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+  },
+  "response": {}
+}

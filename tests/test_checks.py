@@ -16,6 +16,7 @@ from offer_checkpost.checks import (
     find_fraud_notice_params,
     lookup_official_site_params,
     maps_link,
+    may_report_fake_offers,
     mentions,
     names_match,
     read_confirm_sender_domain,
@@ -36,6 +37,8 @@ from offer_checkpost.rules import RULES, decide
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures" / "serp"
+# The synthetic stand-ins of the demo samples, which the fixtures under FIXTURES answer.
+OFFERS = ROOT / "tests" / "fixtures" / "offers"
 AT = "2026-10-02T10:00:00+05:30"
 
 SEARCH_RULES = {
@@ -53,7 +56,7 @@ def fixture(name):
 
 
 def claims_of(sample):
-    return extract_claims((ROOT / "samples" / "offers" / sample).read_text())
+    return extract_claims((OFFERS / sample).read_text())
 
 
 def rules_of(reading):
@@ -1153,18 +1156,45 @@ def headline(title, company="Contoso"):
     )
 
 
+REPORTS = [
+    "Fake Contoso job offers ask graduates for a joining fee, company warns",
+    "Fraudsters posing as Contoso recruiters dupe 40 freshers",
+    "Contoso warns of recruitment fraud in its name",
+    "Job offer scam in Contoso's name busted in Pune",
+    "Beware of fake Contoso offer letters, police say",
+]
+
+
+@pytest.mark.parametrize("title", REPORTS)
+def test_headlines_that_report_fake_offers(title):
+    assert rules_of(headline(title)) == ["impersonation_reports"]
+
+
+@pytest.mark.parametrize(
+    ("title", "company"),
+    [(title, "Contoso") for title in REPORTS]
+    + [
+        ("Fake Zorvanta Support Services job offers doing the rounds", "Zorvanta Support Services")
+    ],
+)
+def test_every_headline_the_reader_counts_survives_the_recording_scrub(title, company):
+    # The scrub keeps a headline only when may_report_fake_offers holds, without knowing the
+    # company; a report it dropped would make a replay differ from the live run.
+    assert rules_of(headline(title, company)) == ["impersonation_reports"]
+    assert may_report_fake_offers(title)
+
+
 @pytest.mark.parametrize(
     "title",
     [
-        "Fake Contoso job offers ask graduates for a joining fee, company warns",
-        "Fraudsters posing as Contoso recruiters dupe 40 freshers",
-        "Contoso warns of recruitment fraud in its name",
-        "Job offer scam in Contoso's name busted in Pune",
-        "Beware of fake Contoso offer letters, police say",
+        "Contoso shares fall after accounting fraud probe",
+        "Contoso names A. Person its new chief executive",
+        "Jury finds a founder guilty in fraud trial",
+        "Contoso to set up a logistics hub in Pune",
     ],
 )
-def test_headlines_that_report_fake_offers(title):
-    assert rules_of(headline(title)) == ["impersonation_reports"]
+def test_news_with_no_fraud_term_or_no_job_word_is_not_kept_for_replay(title):
+    assert not may_report_fake_offers(title)
 
 
 @pytest.mark.parametrize(

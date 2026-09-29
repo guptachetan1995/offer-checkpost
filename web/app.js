@@ -957,9 +957,10 @@ function busyLabel(key, idle, working) {
 
 function progressText() {
   const p = ui.progress;
-  if (!p) return 'Searching…';
-  const n = Math.max(0, p.now - p.start);
-  return n ? `Searching: ${plural(n, 'SerpApi call')} so far` : 'Searching…';
+  const n = p ? Math.max(0, p.now - p.start) : 0;
+  const said = n ? `Searching: ${plural(n, 'SerpApi call')} so far` : 'Searching…';
+  // A live site: search took over a minute on 29 Sep 2026; the page should not look stuck.
+  return state.server?.provider === 'live' ? `${said} (one live search can take a minute)` : said;
 }
 
 // ---- rendering: header and the call-log strip ---------------------------------------------

@@ -41,7 +41,8 @@ from offer_checkpost.providers import (
 from offer_checkpost.rules import RULES, decide, is_decisive, text_signal
 from offer_checkpost.scrub import WHITELIST
 
-SAMPLES_DIR = Path(__file__).resolve().parents[1] / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
+SAMPLES_DIR = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "offers"
 MAX_SEARCHES = 6  # the planner's default budget
 NOW = 1_791_000_000.0
 RETRIEVED_AT = datetime.fromtimestamp(NOW, UTC).isoformat()
@@ -137,6 +138,36 @@ def confirm_a(case):
     return case
 
 
+def remaining_a(case):
+    """The rest of the checks the decisive stop skipped, after ``confirm_a``: the employer's
+    own listing, the office and the scam reports."""
+    company, role, city = case.claim("company"), case.claim("role"), case.claim("city")
+    case.run(
+        "check_job_listings",
+        check_job_listings_params(role, city, company),
+        read_job_listings,
+        company=company,
+        role=role,
+        city=city,
+        official_domain=case.steps[0][2].facts["officialDomain"],
+        offered_monthly_inr=case.claims["pay"]["monthlyInr"],
+    )
+    case.run(
+        "check_office",
+        check_office_params(company, city),
+        read_office,
+        company=company,
+        city=city,
+    )
+    case.run(
+        "check_scam_reports",
+        check_scam_reports_params(company),
+        read_scam_reports,
+        company=company,
+    )
+    return case
+
+
 def walk_b(case):
     """Step 1 finds the sender official and no fee is asked, so R2 skips the fraud notice
     and runs the job listings first, then the office and the scam reports."""
@@ -207,7 +238,7 @@ def remaining_c(case):
 
 
 WALKS = {
-    "a": lambda case: confirm_a(walk_a(case)),
+    "a": lambda case: remaining_a(confirm_a(walk_a(case))),
     "b": walk_b,
     "c": lambda case: remaining_c(walk_c(case)),
 }
@@ -265,6 +296,16 @@ def test_sample_a_the_employer_naming_the_lookalike_replaces_it():
         "sender_lookalike set aside: replaced by domain_named_in_fraud_notice "
         "for brand-careers.example"
     ) in d.reasons
+
+
+def test_sample_a_stays_high_risk_through_the_rest_of_the_remaining_checks():
+    case = remaining_a(confirm_a(walk_a(Case("a", fake()))))
+    assert case.trail()[3:] == [
+        ("check_job_listings", "google_jobs", ["no_listing_match"], "high_risk"),
+        ("check_office", "google_maps", ["office_not_found"], "high_risk"),
+        ("check_scam_reports", "google_news", ["impersonation_reports"], "high_risk"),
+    ]
+    assert case.spent == MAX_SEARCHES
 
 
 def test_sample_b_is_consistent_with_genuine_after_four_searches():

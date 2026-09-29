@@ -35,7 +35,8 @@ from offer_checkpost.verbs import VERBS
 pytestmark = pytest.mark.loopback
 
 ENTRY = Path(__file__).resolve().parents[1]
-SAMPLES = ENTRY / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
+SAMPLES = ENTRY / "tests" / "fixtures" / "offers"
 WAIT = 20
 
 

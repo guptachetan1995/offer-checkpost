@@ -5,15 +5,20 @@ fetched. ``scrub`` applies the same per-engine whitelist again, because a record
 published with the repository and a restrictor string can drift from the readers. After the
 whitelist it:
 
-- drops every result whose ``link`` is a person's profile (LinkedIn ``/in/``, Facebook,
-  Instagram, X/Twitter, Truecaller);
+- drops every result whose ``link`` is a person's profile: a LinkedIn profile (``/in/``), or
+  anything on Facebook, Instagram, X/Twitter or Truecaller, brand pages included;
+- drops every result on a video site (YouTube, Vimeo, Dailymotion): no reader needs one, and
+  their descriptions name the people speaking;
+- keeps only the Google News headlines that carry a fraud term and a job word, the only ones
+  ``read_scam_reports`` can count: the rest are news no reader looks at, and often name people;
 - cuts a Google Jobs listing's ``description`` down to the sentences that carry pay, the only
   thing the pay benchmark reads from it;
 - masks every email address (``***@domain``: the domain stays, since a fraud notice naming a
   look-alike domain is evidence) and every phone number (``+91 9XXXX XXXXX``: the first digit
   stays, the way the sample offers write them), in any spacing or punctuation. Inside a link
-  only a number written as a phone (``tel:``, ``wa.me/``, ``?phone=``) or shaped like an
-  Indian mobile number is masked, so a job or article id survives and the evidence link
+  only a number written as a phone (``tel:``, ``wa.me/``, ``?phone=``), or shaped like an
+  Indian mobile number and standing on its own (not run into letters, as in a hex id or an
+  App Store ``id6…``), is masked, so a job or article id survives and the evidence link
   still opens;
 - removes anything key-shaped: a 64-hex run, or an ``api_key=`` value.
 
@@ -28,6 +33,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from offer_checkpost.checks import may_report_fake_offers
 from offer_checkpost.domains import registrable_domain
 from offer_checkpost.extract import _sentences
 from offer_checkpost.salary import parse_pay
@@ -83,6 +89,7 @@ PEOPLE_PROFILE_DOMAINS = frozenset(
 )
 # LinkedIn also hosts company pages and job listings; only these paths are a person.
 LINKEDIN_PROFILE_PATHS = ("/in/", "/pub/")
+VIDEO_DOMAINS = frozenset({"youtube.com", "youtu.be", "vimeo.com", "dailymotion.com"})
 
 REMOVED = "[removed]"
 
@@ -111,6 +118,10 @@ def scrub(engine: str, response: Mapping[str, Any]) -> dict[str, Any]:
     if engine not in _SHAPES:
         raise ValueError(f"no field whitelist for engine {engine!r}")
     kept = _keep(response, _SHAPES[engine])
+    if "news_results" in kept:
+        kept["news_results"] = [
+            n for n in kept["news_results"] if may_report_fake_offers(n.get("title", ""))
+        ]
     for job in kept.get("jobs_results", []):
         if "description" in job:
             job["description"] = pay_sentences(job["description"])
@@ -132,7 +143,7 @@ def _keep(obj: Mapping[str, Any], shape: Shape) -> dict[str, Any]:
         value = obj[name]
         if many:
             if isinstance(value, list):
-                items = (_item(v, child) for v in value if not _is_profile_result(v))
+                items = (_item(v, child) for v in value if not _is_dropped_result(v))
                 out[name] = [item for item in items if item]
         elif child is not None:
             if isinstance(value, Mapping) and (kept := _keep(value, child)):
@@ -157,12 +168,10 @@ def _leaf(value: Any) -> Any:
     return None
 
 
-def _is_profile_result(value: Any) -> bool:
-    return (
-        isinstance(value, Mapping)
-        and isinstance(value.get("link"), str)
-        and is_people_profile(value["link"])
-    )
+def _is_dropped_result(value: Any) -> bool:
+    if not (isinstance(value, Mapping) and isinstance(value.get("link"), str)):
+        return False
+    return is_people_profile(value["link"]) or is_video_page(value["link"])
 
 
 def _clean(value: Any) -> Any:
@@ -185,6 +194,11 @@ def is_people_profile(url: str) -> bool:
         return False
     path = urlsplit(url if "://" in url else "//" + url).path.lower()
     return path.startswith(LINKEDIN_PROFILE_PATHS)
+
+
+def is_video_page(url: str) -> bool:
+    """True when ``url`` is on a video site: YouTube, Vimeo or Dailymotion."""
+    return registrable_domain(url) in VIDEO_DOMAINS
 
 
 def pay_sentences(description: str) -> str:
@@ -216,13 +230,16 @@ _PHONE = re.compile(
     r")(?!\w)"
 )
 # Links: a run of digits in a link is an id (a job, an article) unless it is written as a
-# phone, after tel:, wa.me/ or a phone-like query parameter, or is an Indian mobile number.
+# phone, after tel:, wa.me/ or a phone-like query parameter, or is an Indian mobile number
+# standing on its own: ten digits run into letters are part of a hex or App Store id.
 _LINK = re.compile(r"(?:\b[a-z][a-z0-9+.-]*://|\bwww\.|\bwa\.me/|\btel:)[^\s<>\"']*", re.I)
 _PHONE_MARK = re.compile(
     r"(?:tel:|wa\.me/|[?&;](?:phone|mobile|mob|tel|whatsapp|contact)=)(?:\+|%2B)?$", re.I
 )
 _MARKED_NUMBER = re.compile(r"\d(?:(?:[-.]|%20)?\d){6,}")
-_MOBILE = re.compile(r"(?:(?<=%[0-9A-Fa-f]{2})|(?<!\d))(?P<prefix>91|0)?[6-9]\d{9}(?!\d)")
+_MOBILE = re.compile(
+    r"(?:(?<=%[0-9A-Fa-f]{2})|(?<![0-9A-Za-z]))(?P<prefix>91|0)?[6-9]\d{9}(?![0-9A-Za-z])"
+)
 # "₹15000-20000" and "salary 65000-75000 per month" have the shape of a phone number written
 # 5-5 with a hyphen; the words around them are what make them pay.
 _MONEY_BEFORE = re.compile(
@@ -300,8 +317,9 @@ def _mask_link(link: str) -> str:
 def mask_phones(text: str) -> str:
     """Each phone number with every digit after its first written as ``X`` (a ``+91``,
     ``91`` or trunk ``0`` in front stays). In a link, only a number written as a phone
-    (after ``tel:``, ``wa.me/`` or a ``phone=``-like parameter) or shaped like an Indian
-    mobile number is masked, so the link's other ids survive and it still opens."""
+    (after ``tel:``, ``wa.me/`` or a ``phone=``-like parameter), or shaped like an Indian
+    mobile number and not run into letters, is masked, so the link's other ids survive and it
+    still opens."""
     return "".join(
         _mask_link(piece) if is_link else _mask_text(piece) for piece, is_link in _segments(text)
     )
@@ -310,6 +328,7 @@ def mask_phones(text: str) -> str:
 _DIGIT_RUN = re.compile(rf"\d+(?:{_SEPARATORS}{{1,3}}\d+)*")
 _LINK_DIGITS = re.compile(r"\d(?:[-. ()]?\d)*")
 _MOBILE_DIGITS = re.compile(r"(?:91|0)?[6-9]\d{9}")
+_ID_LETTER = re.compile(r"[A-Za-z]")
 
 
 def _phone_digits(digits: str, intl: bool) -> bool:
@@ -347,9 +366,17 @@ def _link_phones(link: str) -> list[str]:
     for m in _LINK_DIGITS.finditer(text):
         if _PHONE_MARK.search(text, 0, m.start()) and len(re.sub(r"\D", "", m.group())) >= 7:
             found.append(m.group())
-        else:
-            found += [d for d in re.findall(r"\d+", m.group()) if _MOBILE_DIGITS.fullmatch(d)]
+            continue
+        for d in re.finditer(r"\d+", m.group()):
+            start, end = m.start() + d.start(), m.start() + d.end()
+            if _MOBILE_DIGITS.fullmatch(d.group()) and not _run_into_letters(text, start, end):
+                found.append(d.group())
     return found
+
+
+def _run_into_letters(text: str, start: int, end: int) -> bool:
+    # _LINK_DIGITS already takes every digit next to the run, so only a letter can touch it.
+    return bool(_ID_LETTER.match(text[start - 1 : start]) or _ID_LETTER.match(text[end : end + 1]))
 
 
 def find_phones(text: str) -> list[str]:

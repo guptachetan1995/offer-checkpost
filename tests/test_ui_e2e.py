@@ -1,5 +1,6 @@
 """The page in a real browser against the real server: Playwright drives Google Chrome through
-paste, confirm, investigate and publish for sample A, on the synthetic fixtures.
+paste, confirm, investigate and publish for sample A, on the SerpApi responses recorded for the
+demo samples (replay), as a judge without a key sees it.
 
 Nothing else checks that the two halves fit: the page's own JavaScript, the Content-Security-
 Policy it runs under, the session the address ``serve`` prints opens, the clicks going out
@@ -9,17 +10,18 @@ Playwright or Chrome is missing, so a fresh clone still passes; it never downloa
 
 The page mirrors two tables it can't read from the server (the rule labels, which the draft's
 "Also found" lines are matched on, and the Offer Board labels); the first tests hold them to the
-server's, without a browser.
+server's, without a browser, and the tools it counts on to keep a case's revision to theirs, on
+the synthetic fixtures.
 
 The later tests set most of their cases up through ``invoke`` as the person, as the page's own
-clicks would, then load the page and check what it shows: what a correction makes out of date,
-the labels a draft verdict allows, the call-log strip, the replay banner, focus on a narrow
-window, and contrast; what a browser without the session gets, what an address already opened
-opens, and what a program on another port of 127.0.0.1 gets from the browser (the cookie, never
-the key); the agent's calls appearing while the person is mid-sentence, without costing them
-their text, caret, open disclosure or scroll; a label chosen before the agent changed the case
-never publishing the changed case; claims the agent confirmed saying so; and a page whose
-session ended saying so."""
+clicks would, on the same recordings, then load the page and check what it shows: what a
+correction makes out of date, the labels a draft verdict allows, the call-log strip, the replay
+banner, focus on a narrow window, and contrast; what a browser without the session gets, what
+an address already opened opens, and what a program on another port of 127.0.0.1 gets from the
+browser (the cookie, never the key); the agent's calls appearing while the person is
+mid-sentence, without costing them their text, caret, open disclosure or scroll; a label chosen
+before the agent changed the case never publishing the changed case; claims the agent confirmed
+saying so; and a page whose session ended saying so."""
 
 from __future__ import annotations
 
@@ -45,6 +47,9 @@ ENTRY = Path(__file__).resolve().parents[1]
 WEB = ENTRY / "web"
 SAMPLES = ENTRY / "samples" / "offers"
 SAMPLE_A = SAMPLES / "a.txt"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
+STAND_INS = ENTRY / "tests" / "fixtures" / "offers"
+RECORDED = "29 Sep 2026"
 
 # The clicks in the walk below, each a person's; the planner's checks inside investigate are
 # the agent's.
@@ -92,8 +97,8 @@ def test_the_tools_the_page_counts_on_to_keep_a_revision_keep_it():
         "check_contact_footprint",
     }
     store = Store(FakeSearchProvider.from_fixtures())
-    case_id = investigated(store, "a")
-    special = {"open_case": {"text": SAMPLE_A.read_text("utf-8")}, "list_cases": {}}
+    case_id = investigated(store, "a", samples=STAND_INS)
+    special = {"open_case": {"text": (STAND_INS / "a.txt").read_text("utf-8")}, "list_cases": {}}
     special["search_budget"] = {}
     for tool in sorted(keeps):
         before = store.cases[case_id]["revision"]
@@ -135,7 +140,8 @@ def origin(server):
 
 @pytest.fixture
 def app():
-    store = Store(FakeSearchProvider.from_fixtures())
+    """The server on the recorded SerpApi responses, the way it runs without a key."""
+    store = Store(ReplaySearchProvider())
     with serving(store) as server:
         yield store, server
 
@@ -234,7 +240,10 @@ def test_paste_confirm_investigate_publish_in_chrome(app, browser):
     assert page.evaluate("[location.hash, sessionStorage.getItem('session')]") == ["", session.key]
     page.wait_for_selector("#sample-wrap:not([hidden])")
     assert page.inner_text("#bind") == store.server["bind"]
-    assert page.inner_text("#provider") == "Fake fixtures (tests)"
+    assert page.inner_text("#provider") == f"Replay: recorded {RECORDED}, not live"
+    assert page.inner_text("#replay").startswith(
+        f"Replaying SerpApi responses recorded on {RECORDED}, not live."
+    )
 
     page.select_option("#sample", "a")
     assert page.input_value("#offer-text") == SAMPLE_A.read_text("utf-8")
@@ -256,6 +265,10 @@ def test_paste_confirm_investigate_publish_in_chrome(app, browser):
     assert page.inner_text(".budget-line").startswith("2 searches spent of 6 · 4 not spent")
     because = page.locator("#trace .because").all_inner_texts()
     assert any("fee was asked" in line for line in because), because
+    # The employer's own notice, as SerpApi returned it on the day it was recorded.
+    evidence = page.inner_text("#evidence")
+    assert "we never ask for recruitment fees" in evidence, evidence
+    assert "freshers.hcltech.com" in evidence, evidence
 
     page.select_option("#pub-label", "likely_impersonation")
     page.fill("#pub-note", "Do not pay the fee.")
@@ -309,11 +322,10 @@ def human(store, tool, args):
     return out["result"]
 
 
-def investigated(store, name, *, remaining=False):
+def investigated(store, name, *, remaining=False, samples=SAMPLES):
     """Opens, confirms, investigates and drafts one sample the way the page's clicks do."""
-    case_id = human(store, "open_case", {"text": (SAMPLES / f"{name}.txt").read_text("utf-8")})[
-        "id"
-    ]
+    text = (samples / f"{name}.txt").read_text("utf-8")
+    case_id = human(store, "open_case", {"text": text})["id"]
     human(store, "update_claims", {"case_id": case_id, "confirm": True})
     human(store, "investigate", {"case_id": case_id})
     if remaining:
@@ -853,12 +865,11 @@ def test_a_click_before_the_page_saw_the_agents_change_is_refused_and_says_what_
     assert problems == []
 
 
-class Held(FakeSearchProvider):
-    """The synthetic fixtures, holding the second search until ``go`` is set."""
+class Held(ReplaySearchProvider):
+    """The recorded responses, holding the second search until ``go`` is set."""
 
     def __init__(self):
-        fixtures = FakeSearchProvider.from_fixtures()
-        self.__dict__.update(fixtures.__dict__)
+        super().__init__()
         self.second = threading.Event()
         self.go = threading.Event()
         self.count = 0
@@ -905,6 +916,36 @@ def test_the_agents_call_during_the_persons_own_is_said_and_unsettles_the_label(
             "The agent changed this case after you read it: it called update_claims."
         )
         assert page.input_value("#pub-label") == ""
+        assert problems == []
+
+
+class HeldLive(Held):
+    """``Held``, named live: the page sees what a live provider shows it."""
+
+    name = "live"
+
+
+@pytest.mark.e2e
+@pytest.mark.loopback
+@pytest.mark.parametrize(("held", "live"), [(Held, False), (HeldLive, True)])
+def test_the_progress_line_says_a_live_search_can_take_a_minute(browser, held, live):
+    # A live site: search took over a minute on 29 Sep 2026: the page must not look stuck.
+    provider = held()
+    with serving(Store(provider)) as server:
+        page, problems = opened(browser, server)
+        page.select_option("#sample", "a")
+        page.click("#open-case")
+        page.click("[data-focus=confirm-claims]")
+        page.wait_for_selector(".claims .state.ok")
+        page.click("[data-focus=investigate]")
+        assert provider.second.wait(10)
+        page.wait_for_selector("#progress:has-text('1 SerpApi call so far')")
+        said = page.inner_text("#progress")
+        provider.go.set()
+        page.wait_for_selector("#progress", state="detached")
+
+        assert said.startswith("Searching: 1 SerpApi call so far")
+        assert ("(one live search can take a minute)" in said) is live
         assert problems == []
 
 

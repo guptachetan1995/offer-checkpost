@@ -50,7 +50,9 @@ FIXTURES_DIR = ENTRY_ROOT / "tests" / "fixtures" / "serp"
 ROUTES_FILE = "routes.json"
 
 CACHE_TTL_SECONDS = 24 * 60 * 60
-CLIENT_TIMEOUT_SECONDS = 20
+# A site: search took 62-66 s on 29 Sep 2026 and plain lookups up to 23 s. SerpApi charges a
+# search the client gave up on, so a shorter wait spends the search and gets nothing.
+CLIENT_TIMEOUT_SECONDS = 90
 
 # Params that change how a search is served, not what it asks.
 _NOT_PART_OF_THE_QUERY = frozenset({"no_cache"})

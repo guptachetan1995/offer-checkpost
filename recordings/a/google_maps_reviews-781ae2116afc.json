@@ -1,0 +1,12 @@
+{
+  "recordedAt": "2026-09-29T15:06:47+05:30",
+  "engine": "google_maps_reviews",
+  "params": {
+    "engine": "google_maps_reviews",
+    "place_id": "ChIJqz-Jq3_nDDkRWXsNjOcS0Eg",
+    "hl": "en",
+    "query": "fee",
+    "json_restrictor": "reviews[].{snippet,rating,iso_date,link}"
+  },
+  "response": {}
+}

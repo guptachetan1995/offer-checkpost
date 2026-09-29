@@ -32,9 +32,11 @@ fmt: setup
 	$(VENV)/bin/ruff format .
 	$(VENV)/bin/ruff check --fix .
 
-record-fixtures:
-	@echo "make record-fixtures: arrives in a later slice, with the live provider" >&2
-	@exit 1
+# Spends live SerpApi searches with the key in .env, at most 24 for these three samples, and
+# refuses before any search when this month's usage would pass 40: MAX_TOTAL=n moves that cap.
+record-fixtures: setup
+	$(PYTHON) -m offer_checkpost record a=samples/offers/a.txt b=samples/offers/b.txt \
+		c=samples/offers/c.txt $(if $(MAX_TOTAL),--max-total $(MAX_TOTAL))
 
 demo-record:
 	@echo "make demo-record: arrives in a later slice, with the screen recorder" >&2

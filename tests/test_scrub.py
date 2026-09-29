@@ -62,6 +62,18 @@ RAW_GOOGLE = {
             "link": "https://in.linkedin.com/in/a-recruiter-000",
             "snippet": "Talent acquisition at Brand.",
         },
+        {
+            "position": 3,
+            "title": "Brand India | Facebook",
+            "link": "https://www.facebook.com/brandindia",
+            "snippet": "Brand's own page.",
+        },
+        {
+            "position": 4,
+            "title": "Inside Brand's hiring: a fireside chat",
+            "link": "https://www.youtube.com/watch?v=synthetic01",
+            "snippet": "In this episode, A. Speaker, Head of Talent at Brand, shares ...",
+        },
     ],
     "related_questions": [{"question": "Is Brand hiring?"}],
     "serpapi_pagination": {"next": "https://serpapi.example/search?start=10"},
@@ -156,6 +168,18 @@ RAW_NEWS = {
             "link": "https://twitter.com/someone/status/1",
             "source": {"name": "X"},
         },
+        {
+            "position": 3,
+            "title": "Brand names A. Person its new chief executive",
+            "link": "https://news.example/brand-new-ceo",
+            "source": {"name": "News Example"},
+        },
+        {
+            "position": 4,
+            "title": "Brand shares fall after accounting fraud probe",
+            "link": "https://news.example/brand-probe",
+            "source": {"name": "News Example"},
+        },
     ]
 }
 
@@ -187,7 +211,9 @@ RAW_REVIEWS = {
 }
 
 
-def test_google_keeps_only_the_knowledge_graph_title_and_website_and_organic_text():
+def test_google_keeps_the_knowledge_graph_and_organic_text_and_drops_profiles_and_videos():
+    # A LinkedIn profile, a brand's own Facebook page and a video whose description names the
+    # speaker are all dropped: no reader needs them.
     assert scrub("google", RAW_GOOGLE) == {
         "knowledge_graph": {"title": "Brand", "website": "https://www.brand.example/"},
         "organic_results": [
@@ -246,7 +272,9 @@ def test_google_maps_keeps_the_place_fields_from_local_results_and_place_results
     }
 
 
-def test_google_news_keeps_title_link_source_name_and_date_and_drops_profile_posts():
+def test_google_news_keeps_only_headlines_that_may_report_fake_offers():
+    # A post on X, company news naming a person, and fraud news with no job word are dropped:
+    # read_scam_reports can count none of them.
     assert scrub("google_news", RAW_NEWS) == {
         "news_results": [
             {
@@ -438,6 +466,22 @@ def test_an_id_in_a_link_is_not_a_phone(link):
 @pytest.mark.parametrize(
     "masked",
     [
+        # Ten digits run into a hex job id, and an App Store id: ids, not phones.
+        "https://www.jobleads.example/in/job/some-role--city--e66810e30e23c71eafe8XXXXXXXXXf71e",
+        "https://apps.example/in/app/some-app/id6XXXXXXXXX",
+        "https://apps.example/in/app/some-app/id6XXXXXXXXX?platform=iphone",
+    ],
+)
+def test_ten_digits_run_into_letters_in_a_link_are_an_id_not_a_phone(masked):
+    link = unmasked(masked)
+    assert find_phones(link) == []
+    assert clean_text(link) == link
+    assert clean_text(f"Apply at {link} today") == f"Apply at {link} today"
+
+
+@pytest.mark.parametrize(
+    "masked",
+    [
         "https://wa.me/919XXXXXXXXX",
         "https://api.whatsapp.com/send?phone=919XXXXXXXXX&text=Hi",
         "https://jobs.example/apply?phone=%2B919XXXXXXXXX",
@@ -483,7 +527,12 @@ def test_links_keep_their_ids_through_the_scrub():
         ],
     }
     news = {
-        "news_results": [{"title": "A", "link": "https://news.example/articleshow/1234567890.cms"}]
+        "news_results": [
+            {
+                "title": "Fake Brand job offers doing the rounds",
+                "link": "https://news.example/articleshow/1234567890.cms",
+            }
+        ]
     }
     assert scrub("google_news", news) == news
 

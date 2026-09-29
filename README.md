@@ -8,24 +8,24 @@ once. Offer Checkpost treats it as a set of claims and checks each one against
 fee", replies to the recruiter, or sends a photo of their Aadhaar card. The students get the
 answer as a WhatsApp message or a shared page, and install nothing.
 
-A scammer can forge a job offer, but not the search results about it. The company's official
-domain is in Google's knowledge graph, and that domain may carry the company's own warning that
-it never charges candidates. A real opening is listed on Google Jobs, and a real office shows
-up on Google Maps.
+A scammer can forge a job offer, but not the search results about it. Google names the
+company's official domain (in its knowledge graph, or as the top result), and that domain may
+carry the company's own warning that it never charges candidates. A real opening is listed on
+Google Jobs, and a real office shows up on Google Maps.
 
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
-**Status: the investigator, the local web app and its MCP adapter are built and tested; the
-recorded SerpApi responses and the demo video are next.** `python -m offer_checkpost serve`
-runs the app ([Run it](#run-it)), `python -m offer_checkpost mcp` serves its agent tools to an
-MCP client ([Use it from an MCP client](#use-it-from-an-mcp-client)), and
+**Status: the investigator, the local web app and its MCP adapter are built and tested, and
+the three demo samples' SerpApi responses were recorded with a real key on 29 September 2026;
+the demo video is next.** `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
+`python -m offer_checkpost mcp` serves its agent tools to an MCP client
+([Use it from an MCP client](#use-it-from-an-mcp-client)), and
 `python -m offer_checkpost investigate <file>` runs an offer through the same path from the
 command line; `samples/offers/` holds 21 fictional offers to try. With a SerpApi key it
-searches live. Without one it starts in replay mode, which serves SerpApi responses recorded
-with a real key. None are in the repository yet: they are recorded before submission, and
-until then each search in replay fails and says so. `--provider fake` shows the whole flow on
-the three demo samples with synthetic data.
+searches live, and one search can take about a minute. Without one it starts in replay mode, which serves those recorded responses
+(`recordings/`), dated and marked as not live, so the three demo samples run end to end with no
+key ([The three demo samples](#the-three-demo-samples)).
 
 ## What's different here
 
@@ -37,8 +37,8 @@ the three demo samples with synthetic data.
   `src/offer_checkpost/store.py`, the reuse is `_reuse` in `src/offer_checkpost/planner.py`,
   and `samples/offers/a-forwarded.txt` is Sample A forwarded again.
 - **The decisive evidence is the employer contradicting the message.** When the message asks
-  for a fee and the knowledge graph names the employer's official domain, a `site:` search of
-  that domain looks for the employer's own recruitment-fraud notice. A notice saying it charges
+  for a fee and Google names the employer's official domain (in its knowledge graph, or as the
+  top result), a `site:` search of that domain looks for the employer's own recruitment-fraud notice. A notice saying it charges
   candidates nothing fires `fee_contradicts_employer`, a strong red signal quoted with its link
   (`read_fraud_notice` in `src/offer_checkpost/checks.py`, the rule table in
   `src/offer_checkpost/rules.py`).
@@ -69,7 +69,7 @@ the three demo samples with synthetic data.
 |---|---|
 | **Idea strength** | The opening lines and [The problem](#the-problem): who runs it, why one check serves a batch, and why the two kinds of mistake cost different things. [What it can't check](#what-it-cant-check) says where the idea stops. |
 | **Originality** | [What's different here](#whats-different-here), each point with the file it lives in. |
-| **Technical complexity** | `src/offer_checkpost/planner.py`, whose docstring is the whole policy (order, reorder rules, stops, budget, quota guard, reuse, the trace's fields); `extract.py` (claims with source spans; ₹, K, LPA, lakh and `+91`; romanised Hinglish); `domains.py` (registrable domains, look-alikes); `salary.py` (listing pay to monthly, the median benchmark); `invoke.py` (the one path in); `server.py` (the session, the loopback guards); `mcp_server.py`. `tests/`: the rules and bands, one planner trace per demo sample, HTTP over a real socket, the MCP adapter over its pipes, and the page in Chrome; `./verify.sh` runs them all. |
+| **Technical complexity** | `src/offer_checkpost/planner.py`, whose docstring is the whole policy (order, reorder rules, stops, budget, quota guard, reuse, the trace's fields); `extract.py` (claims with source spans; ₹, K, LPA, lakh and `+91`; romanised Hinglish); `domains.py` (registrable domains, look-alikes); `salary.py` (listing pay to monthly, the median benchmark); `invoke.py` (the one path in); `server.py` (the session, the loopback guards); `mcp_server.py`. `tests/`: the rules and bands, one planner trace per demo sample (on synthetic fixtures, and replayed from the real recordings), HTTP over a real socket, the MCP adapter over its pipes, and the page in Chrome; `./verify.sh` runs them all. |
 | **Usefulness** | [How it works](#how-it-works), step 4: the recruiter reply, the 1930 summary, and the Offer Board's "Copy for WhatsApp" text. [Setup, run, test](#setup-run-test) has macOS, Linux and Windows commands; [Keys and privacy](#keys-and-privacy) says what leaves the machine. |
 | **Meaningful SerpApi usage** | [Where SerpApi comes in](#where-serpapi-comes-in): each engine, the fields read, the rules it can fire, and the India parameters. `src/offer_checkpost/checks.py` (one params builder and one reader per check), `providers.py` (live with a disk cache, replay, fake; the key kept out of every log and error), the Account API quota guard in `planner.py`, and `tests/test_checks.py`. |
 
@@ -108,8 +108,9 @@ contradictions found", and a verdict posted for others to read is always a perso
      company's own fraud notice;
    - the firm has no web footprint at all: it checks for the office on Maps before looking for
      job listings;
-   - the recruiter writes from the official domain and asks no fee: it skips the fraud-notice
-     search and looks for the listing first;
+   - every recruiter email and link is on the official domain and no fee was asked: it skips
+     the fraud-notice search, since a notice would have nothing to contradict, and looks for
+     the listing next;
    - there's no Maps place: there's no reviews query.
 
    It stops as soon as the evidence is decisive. The trace shows every search, why it ran or
@@ -143,7 +144,7 @@ becomes the person). No LLM runs inside the app.
 
 | Engine | What it checks | Fields read | Rules it can fire |
 |---|---|---|---|
-| `google` (knowledge graph, organic) | The company's official domain, and whether the recruiter's email or link domain is that domain, a look-alike, or a free-mail address | `knowledge_graph.website`, `organic_results[].link` | `sender_official`, `sender_lookalike`, `sender_free_mail`, `no_web_footprint` |
+| `google` (knowledge graph, organic) | The company's official domain, and whether the recruiter's email or link domain is that domain, a look-alike, or a free-mail address | `knowledge_graph.website`, `organic_results[].link` | `sender_official` (only when a knowledge graph names the domain), `sender_lookalike`, `sender_free_mail`, `no_web_footprint` |
 | `google` with `site:<official domain>` | Whether the employer's own site publishes a recruitment-fraud notice that says it never charges fees; whether it mentions a look-alike domain, and in what context | `organic_results[].title`, `.snippet`, `.link` | `fee_contradicts_employer`, `employer_fraud_notice_exists`, `domain_named_in_fraud_notice` |
 | `google_jobs` | Whether this company lists this role near this city, with an apply option on the official domain, and what comparable roles there pay | `jobs_results[].apply_options`, `.detected_extensions.salary` (then `.extensions`, then `.description`) | `listing_match`, `no_listing_match`, `pay_outlier` |
 | `google_maps` | Whether the claimed office exists as a place | `local_results[].place_id`, `.title`, `.address` | `office_found`, `office_not_found` |
@@ -228,9 +229,9 @@ as the agent's.
 - pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and,
   next, the demo recording
 - Three search providers behind one interface: **live** (your SerpApi key, with a local
-  cache), **replay** (serves SerpApi responses recorded with a real key, trimmed and labelled
-  with their date, and needs no key; the recordings are made before submission and are not in
-  the repository yet), and **fake** (synthetic data for the tests)
+  cache), **replay** (serves the demo samples' SerpApi responses, recorded with a real key on
+  29 September 2026, trimmed and labelled with their date, and needs no key), and **fake**
+  (synthetic data for the tests)
 
 ## Setup, run, test
 
@@ -261,16 +262,16 @@ copy .env.example .env
 ### Run it
 
 ```bash
-.venv/bin/python -m offer_checkpost serve                  # or: make run
-.venv/bin/python -m offer_checkpost serve --provider fake  # the synthetic test data
-.venv/bin/python -m offer_checkpost serve --port 8800      # or set PORT; 0 picks a free port
+.venv/bin/python -m offer_checkpost serve                    # or: make run
+.venv/bin/python -m offer_checkpost serve --provider replay  # the recordings, even with a key
+.venv/bin/python -m offer_checkpost serve --port 8800        # or set PORT; 0 picks a free port
 ```
 
 On Windows:
 
 ```bat
 .venv\Scripts\python -m offer_checkpost serve
-.venv\Scripts\python -m offer_checkpost serve --provider fake --port 8800
+.venv\Scripts\python -m offer_checkpost serve --provider replay --port 8800
 ```
 
 Run it in your own terminal. It prints the address to open, `http://127.0.0.1:8741/?token=…`
@@ -281,13 +282,21 @@ browser whose session ended) the person instead and signs the first one out. Cas
 Offer Board are gone when the app stops, and the address changes each time it starts.
 
 - **Which searches it serves.** `--provider`, else `OFFER_CHECKPOST_PROVIDER`, else **live**
-  SerpApi when `SERPAPI_KEY` is set, else **replay**: SerpApi responses recorded with a real
-  key on a stated date, served with no key. Each setting is read from the environment, else
-  from `.env` in the directory you run it from, so a key kept in `.env` needs no `export`. The
-  page names the provider in its header, and in replay a banner says when the responses were
-  recorded and that they are not live, or, while nothing is recorded, that every search fails
-  and nothing is made up. **fake** serves the synthetic data the tests use: it shows the flow,
-  not real search results.
+  SerpApi when `SERPAPI_KEY` is set, else **replay**: the SerpApi responses recorded with a
+  real key on 29 September 2026, served with no key. Each setting is read from the
+  environment, else from `.env` in the directory you run it from, so a key kept in `.env` needs
+  no `export`. The page names the provider in its header, and in replay a banner says when the
+  responses were recorded and that they are not live. Live, the app waits up to 90 seconds
+  for each search: a `site:` search took over a minute on 29 September 2026, and SerpApi
+  counts a search even when the app stops waiting for it.
+- **What replay answers.** Replay works out of the box on the three demo samples, the page's
+  "Try a sample" menu (`samples/offers/a.txt`, `b.txt` and `c.txt`, with **Run remaining
+  checks** on Samples A and C), and on `a-forwarded.txt`, which makes Sample A's searches,
+  remaining checks included. The six samples that name no company search nothing, so they run
+  too, on their text rules. Every other sample in `samples/offers/` needs a key: replay has no
+  recording of its searches, so each one fails and says so, and nothing is made up. **fake**
+  serves the synthetic data the tests use, which answers only the synthetic stand-ins of the
+  demo samples in `tests/fixtures/offers/`: it shows the flow, not real search results.
 - **Who is the person.** The browser that opens the address printed in the terminal, in the
   tab it opened it in. Opening the address uses up its token and starts a session with two
   halves, and only a call carrying both is the person's (`human`):
@@ -320,11 +329,13 @@ Offer Board are gone when the app stops, and the address changes each time it st
   isn't sent as JSON, which another site's page can't send without first asking the browser for
   a permission this server never grants.
 
-To watch the planner work on a sample offer with no key, against the synthetic test data:
+To watch the planner work on a demo sample with no key, on the recorded responses:
 
 ```bash
-.venv/bin/python -m offer_checkpost investigate samples/offers/a.txt --provider fake
+.venv/bin/python -m offer_checkpost investigate samples/offers/a.txt   # also b.txt, c.txt
 ```
+
+With a key set, it searches live; add `--provider replay` to replay the recordings anyway.
 
 It prints every search with why it ran or was skipped, the band, the searches spent and saved,
 the draft verdict and the activity log. `--as agent` makes every call the agent's. Nothing is
@@ -338,6 +349,35 @@ port gets from the browser, paste, confirm, investigate, publish, corrections, t
 strip, the replay banner, the agent's calls showing up while you type, a label chosen before
 the agent changed the case, claims the agent confirmed, a session that ended); where Chrome
 isn't installed they are skipped with the reason, and no browser is ever downloaded.
+
+### The three demo samples
+
+The messages are fictional. What the searches found about them is real: SerpApi's responses,
+recorded with a real key on 29 September 2026, trimmed and scrubbed, are in `recordings/` with
+their own notice, and replay serves them with no key.
+
+- **Sample A** (`samples/offers/a.txt`) impersonates **HCLTech**: a work-from-home data-entry
+  "shortlist" at ₹38,000 a month, a ₹2,499 "refundable registration fee", and a recruiter on
+  the look-alike `hcltech-careers.example`. HCLTech is the employer being impersonated, not the
+  sender: the check finds hcltech.com and quotes HCLTech's own warning, from its own site, that
+  it never asks for recruitment fees. High risk after 2 searches, with 4 saved. **Run
+  remaining checks** spends those 4: hcltech.com neither clears nor names the look-alike, no
+  such listing by HCLTech turns up, HCLTech is on Maps in Noida, and its reviews there,
+  filtered on "fee", come back empty. It stays high risk.
+- **Sample B** (`samples/offers/b.txt`) is a real opening at **Siemens**, an Application
+  Support Engineer role in Bengaluru, open when it was recorded. The message links only to the
+  listing on Siemens's own careers site, and names no pay and no recruiter's name or address.
+  The link is on siemens.com and no fee is asked, so the fraud-notice search is skipped. The
+  checks find that listing and a Siemens office on Maps, and nothing that contradicts the
+  offer: "No contradictions found" after 4 searches.
+- **Sample C** (`samples/offers/c.txt`) comes from an invented firm, Kavrellon Support
+  Services, in Indore: customer support for freshers at ₹42,000 a month, a Telegram-only
+  interview, and Aadhaar and bank photos asked for up front. No web footprint and no office on
+  Maps: high risk after 2 searches. **Run remaining checks** spends 2 more: no listing by the
+  firm, and the offered pay is 2.4 times the median of the 6 of the 10 listings that show pay
+  (₹17,292 a month).
+
+[`samples/offers/README.md`](samples/offers/README.md) says why these names were chosen.
 
 ### Use it from an MCP client
 
@@ -418,10 +458,13 @@ against the real server.
   server stops. The board is a single-machine log; "Copy for WhatsApp" and the downloaded page
   are how a verdict reaches anyone else. Live search results are cached on disk under
   `.cache/serpapi/` for 24 hours; the folder is git-ignored.
-- All sample offers are fictional. Their contacts use reserved `.example` domains and masked
-  phone numbers.
-- Responses recorded for replay mode are trimmed to the fields listed above, with reviewer
-  identities and personal profiles removed, before they are written. Once in the repository,
+- All sample offers are fictional messages. Their contacts use reserved `.example` domains and
+  masked phone numbers; the one real link, in Sample B, is a listing on the employer's own
+  careers site ([The three demo samples](#the-three-demo-samples)).
+- Responses recorded for replay mode are trimmed to the fields listed above before they are
+  written: reviewer identities, personal profiles, anything on Facebook, Instagram or X, video
+  results, and the news headlines the app never reads are removed, since those are where
+  people are named, and phone numbers and email addresses are masked. Once in the repository,
   they are third-party search content, not covered by this repository's licence, and included
   only for replay and tests.
 

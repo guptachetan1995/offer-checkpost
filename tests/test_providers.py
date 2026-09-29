@@ -302,7 +302,7 @@ def test_no_cache_defaults_to_the_environment(tmp_path, serpapi_stub, monkeypatc
     assert ("no_cache=true" in serpapi_stub.urls[0]) is sent
 
 
-def test_the_client_is_the_official_one_with_the_env_key_and_a_20_second_timeout(monkeypatch):
+def test_the_client_is_the_official_one_with_the_env_key_and_a_90_second_timeout(monkeypatch):
     made = []
 
     class SpyClient:
@@ -313,7 +313,9 @@ def test_the_client_is_the_official_one_with_the_env_key_and_a_20_second_timeout
     monkeypatch.setattr(serpapi, "Client", SpyClient)
     monkeypatch.setenv("SERPAPI_KEY", key)
     SerpApiSearchProvider()
-    assert made == [{"api_key": key, "timeout": 20}]
+    # The recorded site: searches took 62-66 s, and SerpApi charges a search the client gave
+    # up on: a shorter timeout spends the search and gets nothing.
+    assert made == [{"api_key": key, "timeout": 90}]
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])

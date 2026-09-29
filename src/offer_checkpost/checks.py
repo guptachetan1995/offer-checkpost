@@ -823,6 +823,16 @@ def _fake_offers(company: str) -> re.Pattern[str]:
     )
 
 
+_REPORTED = _words(_REPORTED_TERMS)
+
+
+def may_report_fake_offers(headline: str) -> bool:
+    """True when a headline carries a fraud term and a job word anywhere in it: every headline
+    ``read_scam_reports`` counts passes, whatever the company. The recording scrub keeps only
+    these, so the headlines no reader looks at, which often name people, are not published."""
+    return bool(_REPORTED.search(headline) and _RECRUITMENT.search(headline))
+
+
 def read_scam_reports(response: dict, *, params: dict, retrieved_at: str, company: str) -> Reading:
     """``check_scam_reports``: news whose headline names the company and reports fake offers:
     a fraud term that qualifies a job word, as in "fake Brand job offers" or "recruitment

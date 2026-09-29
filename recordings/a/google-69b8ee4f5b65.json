@@ -1,0 +1,52 @@
+{
+  "recordedAt": "2026-09-29T13:27:41+05:30",
+  "engine": "google",
+  "params": {
+    "engine": "google",
+    "q": "HCLTech",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Noida, India",
+    "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+  },
+  "response": {
+    "organic_results": [
+      {
+        "title": "HCLTech Insight: GenAI- powered Manufacturing Solution",
+        "link": "https://www.hcltech.com/en-us/hcltech-insight",
+        "snippet": "HCLTech Insight offers GenAI-powered dashboards and a conversational assistant to empower factory line workers to respond swiftly to defects in real-time,"
+      },
+      {
+        "title": "Transform your multicloud network with HCLTech",
+        "link": "https://www.hcltech.com/en-us/networks/transform-your-multicloud-network-hcltech",
+        "snippet": "Unlock agility and performance with HCLTech's multicloud network solutions built for modern enterprises. Explore future-ready connectivity now!"
+      },
+      {
+        "title": "Cloud transformation: Merck's proven modernization factory ...",
+        "link": "https://www.hcltech.com/videos/cloud-transformation-mercks-proven-modernization-factory-model",
+        "snippet": "HCLTech enables AI-first, immersive and secure learning experiences while modernizing education and publishing ecosystems at scale."
+      },
+      {
+        "title": "Latest hcl tech , Information & Updates",
+        "link": "https://telecom.economictimes.indiatimes.com/tag/hcl+tech",
+        "snippet": "HCL Tech shares tank over 9% after weak Q4. The company has guided for revenue growth of 1% to 18.5%. HCLTech collaborate to offer cloud-native solutions to ..."
+      },
+      {
+        "title": "Human-centric transformation starts with how people work",
+        "link": "https://www.hcltech.com/trends-and-insights/human-centric-ai-transformation",
+        "snippet": "HCLTech Pulse. Accelerating AI-led transformation for fast-scaling enterprises with $500M to $5B in annual revenue. Learn more."
+      },
+      {
+        "title": "AI-Native Enterprises: Redefining business models",
+        "link": "https://www.hcltech.com/videos/ai-native-enterprises-redefining-business-models",
+        "snippet": "HCLTech, explore how the AI economy is becoming physical as compute, networks and orchestration move closer to the edge and into devices."
+      },
+      {
+        "title": "HCLTech Videos",
+        "link": "https://www.hcltech.com/en-us/videos?page=1",
+        "snippet": "HCLTech enables AI-first, immersive and secure learning experiences while modernizing education and publishing ecosystems at scale."
+      }
+    ]
+  }
+}

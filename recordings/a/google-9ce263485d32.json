@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-09-29T15:06:21+05:30",
+  "engine": "google",
+  "params": {
+    "engine": "google",
+    "q": "site:hcltech.com \"hcltech-careers.example\"",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Noida, India",
+    "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+  },
+  "response": {}
+}

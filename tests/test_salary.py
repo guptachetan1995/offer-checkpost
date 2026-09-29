@@ -184,6 +184,25 @@ def test_a_figure_labelled_as_something_else_is_skipped(text, raw, monthly):
     assert parse_pay(text) == Pay(raw, monthly)
 
 
+@pytest.mark.parametrize(
+    "description",
+    [
+        # As a Google Jobs description gave it on 29 Sep 2026, and cut short at the line break.
+        "Annual CTC: ₹1.40 LPA – ₹1.80 LPA\nMonthly Salary: ₹11,700 – ₹15,000",
+        "Annual CTC: ₹1.40 LPA – ₹1.80 LPA\nMonthly",
+    ],
+)
+def test_a_period_on_the_next_line_is_not_this_figures(description):
+    # "Monthly" labels the next line's figure; read as this one's, a year's ₹1.6 lakh CTC
+    # became ₹1.6 lakh a month.
+    pay = listing_pay(listing(description=description))
+    assert pay == ListingPay("description", "Annual CTC: ₹1.40 LPA – ₹1.80 LPA", 13_333)
+
+
+def test_lpa_is_a_years_pay_whatever_period_follows_it():
+    assert parse_pay("₹3 – ₹4 LPA per month") == Pay("₹3 – ₹4 LPA per month", 29_167)
+
+
 def test_a_stated_period_wins_over_an_earlier_range_without_one():
     pay = parse_pay("Openings at ₹12,000–₹14,000. Offer: ₹16,000 per month")
     assert (pay.raw, pay.monthly_inr) == ("₹16,000 per month", 16_000)

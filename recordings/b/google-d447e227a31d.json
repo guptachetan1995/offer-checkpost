@@ -1,0 +1,62 @@
+{
+  "recordedAt": "2026-09-29T13:40:46+05:30",
+  "engine": "google",
+  "params": {
+    "engine": "google",
+    "q": "Siemens",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Bengaluru, India",
+    "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+  },
+  "response": {
+    "organic_results": [
+      {
+        "title": "https://www.siemens.com/product_catalog_SIEP?3RH21...",
+        "link": "https://www.siemens.com/product_catalog_SIEP?3RH2131-1BF40",
+        "snippet": "No information is available for this page."
+      },
+      {
+        "title": "Vision and values",
+        "link": "https://www.siemens.com/sl-si/company/about/vision-values-turkiye/",
+        "snippet": "As a trend‑setting company, Siemens is a technology leader in most of its business areas. Innovation means understanding the real needs of the customer and ..."
+      },
+      {
+        "title": "Heavy equipment industry",
+        "link": "https://www.siemens.com/en-gb/industries/heavy-equipment/",
+        "snippet": "Develop and design your heavy equipment for efficiency and safety. Siemens offers extensive products, solutions and services, design, produce and use additive ..."
+      },
+      {
+        "title": "Siemens AG Company Profile",
+        "link": "https://in.investing.com/equities/siemens-company-profile",
+        "snippet": "Siemens Aktiengesellschaft, a technology company, focuses in the areas of automation and digitalization across the world."
+      },
+      {
+        "title": "Scheme of amalgamation | Siemens Limited India",
+        "link": "https://www.siemens.com/en-gb/company/investor-relations-india/scheme-of-amalgamation/",
+        "snippet": "View and download documents related to scheme of amalgamation for Siemens Limited India."
+      },
+      {
+        "title": "A Message to Our Employees, Partners & Customers",
+        "link": "https://news.siemens.com/fr-ca/covid-19-message-to-employees-partners-customers/",
+        "snippet": "Siemens Heathineers has developed a fast track diagnostic that can identify COVID-19 in 3 hours and Bosch developed a COVID-19 rapid test in 6 weeks."
+      },
+      {
+        "title": "Siemens Ltd Company Summary",
+        "link": "https://www.indiainfoline.com/company/siemens-ltd/summary",
+        "snippet": ".Siemens offers products, integrated solutions for industrial applications for manufacturing industries, drives for process industries,"
+      },
+      {
+        "title": "Siemens Technology India Engineering Jobs in ...",
+        "link": "https://in.linkedin.com/jobs/siemens-technology-india-engineering-jobs",
+        "snippet": "6000+ Siemens Technology India Engineering jobs in India. Leverage your professional network, and get hired. AI-powered job search"
+      },
+      {
+        "title": "600 Siemens Job Vacancies in India",
+        "link": "https://in.indeed.com/Siemens-jobs-in-In",
+        "snippet": "620 Siemens jobs available in India on Indeed.com. ll support our customers in developing and enhancing complex computer-aided engineering design and ..."
+      }
+    ]
+  }
+}

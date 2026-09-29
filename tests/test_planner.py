@@ -37,6 +37,9 @@ from offer_checkpost.rules import decide, text_signal
 from offer_checkpost.store import fingerprint
 
 SAMPLES_DIR = Path(__file__).resolve().parents[1] / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer; any
+# other sample is read from samples/offers.
+STAND_INS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "offers"
 NOW = 1_791_000_000.0
 RECORDED_AT = "2026-10-03T10:02:11+05:30"
 NO_ENV: dict[str, str] = {}
@@ -79,8 +82,15 @@ def open_text(text, case_id="case_001", *, confirm=True):
     }
 
 
+def sample_text(name):
+    stand_in = STAND_INS / f"{name}.txt"
+    return (stand_in if stand_in.exists() else SAMPLES_DIR / f"{name}.txt").read_text(
+        encoding="utf-8"
+    )
+
+
 def open_sample(name, case_id="case_001", **kwargs):
-    return open_text((SAMPLES_DIR / f"{name}.txt").read_text(encoding="utf-8"), case_id, **kwargs)
+    return open_text(sample_text(name), case_id, **kwargs)
 
 
 def rule_of(case, signal_id):
@@ -162,16 +172,8 @@ def test_sample_a_decisive_stop_leaves_the_lookalike_unconfirmed():
     assert decide(case["signals"]).evidence_ids == ("sig_1", "sig_3")
 
 
-A_ROLE = "Data Entry Executive (WFH)"
-A_REMAINING = (
-    (check_job_listings_params(A_ROLE, "Noida", "Brand"), "google_jobs/listings_empty.json"),
-    (check_office_params("Brand", "Noida"), "google_maps/office_empty.json"),
-    (check_scam_reports_params("Brand"), "google_news/reports_brand.json"),
-)
-
-
 def test_sample_a_remaining_checks_spend_exactly_the_four_saved():
-    provider = fake(*A_REMAINING)
+    provider = fake()
     case = open_sample("a")
     investigate(case, provider, environ=NO_ENV)
     before = len(case["trace"])
@@ -431,6 +433,37 @@ def test_nothing_for_a_fraud_notice_to_contradict_skips_it_even_off_r2():
     assert stop(case)["because"] == "the search budget is spent: 1 of 1"
 
 
+def test_a_link_on_the_official_domain_skips_the_fraud_notice_without_a_knowledge_graph():
+    # Step 1 took the domain from the top organic result, so sender_official can't fire; the
+    # link is on that domain all the same, and with no fee a notice has nothing to contradict.
+    lookup = lookup_official_site_params("Hexavara Foods", "Chennai")
+    notice = find_fraud_notice_params("hexavara.example", "Chennai")
+    provider = fake(
+        (lookup, "google/official_site_organic_only.json"),
+        (notice, "google/fraud_notice_no_fee_phrase.json"),
+    )
+    posting = sample_text("walk-in-genuine-shape") + (
+        "\nApply at https://careers.hexavara.example/store-supervisor"
+    )
+    case = open_text(posting)
+    investigate(case, provider, max_searches=1, environ=NO_ENV)
+
+    assert line(case, "lookup_official_site")["facts"]["via"] == "organic"
+    assert not [s for s in case["signals"] if s["rule"] == "sender_official"]
+    assert becauses(case, "skipped")["find_fraud_notice"] == (
+        "no fee or sensitive documents were asked for, and no recruiter email or link is "
+        "off hexavara.example"
+    )
+
+    # The same link, with the recruiter writing from another domain, runs it.
+    case = open_text(posting + "\nWrite to hr.desk@quickhire.example")
+    investigate(case, provider, max_searches=2, environ=NO_ENV)
+    assert line(case, "find_fraud_notice")["because"] == (
+        "the recruiter's email or link is not on the official domain and step 1 named the "
+        "official domain hexavara.example"
+    )
+
+
 LOOKALIKES = (
     "Greetings from Brand! You are shortlisted for our Noida office. Write to "
     "hr@brand-careers.example, jobs@brand-hiring.example or desk@brandjobs.example to book a slot."
@@ -634,7 +667,7 @@ def test_run_remaining_checks_refuses_the_agent_and_changes_nothing():
 
 
 def test_run_remaining_checks_stays_within_the_budget_of_the_investigation():
-    provider = fake(*A_REMAINING)
+    provider = fake()
     case = open_sample("a")
     investigate(case, provider, max_searches=5, environ=NO_ENV)
     assert case["budget"] == {
@@ -725,7 +758,7 @@ def test_an_unfinished_earlier_case_is_searched_again():
 
 
 def test_the_fingerprint_ignores_case_spacing_and_legal_suffixes():
-    claims = extract_claims((SAMPLES_DIR / "c.txt").read_text(encoding="utf-8"))
+    claims = extract_claims(sample_text("c"))
     variant = json.loads(json.dumps(claims))
     variant["company"]["value"] = "ZORVANTA  Support Services"
     variant["contacts"][0]["value"] = "+919XXXXXXXXX"
@@ -736,7 +769,7 @@ def test_the_fingerprint_ignores_case_spacing_and_legal_suffixes():
 
 def test_an_offer_at_another_pay_or_fee_is_another_message():
     # The pay benchmark and the fee rules read these, so a finding for one never answers another.
-    claims = extract_claims((SAMPLES_DIR / "a.txt").read_text(encoding="utf-8"))
+    claims = extract_claims(sample_text("a"))
     for field, key, value in [
         ("pay", "monthlyInr", 16000),
         ("fee", "amountInr", 999),
@@ -973,7 +1006,7 @@ def test_a_check_run_again_replaces_its_earlier_finding():
 
 
 def test_investigating_again_checks_afresh_and_a_person_can_still_run_the_remaining_checks():
-    provider = fake(*A_REMAINING)
+    provider = fake()
     case = open_sample("a")
     investigate(case, provider, environ=NO_ENV)
     first = len(case["trace"])
@@ -1025,7 +1058,6 @@ def test_a_lookalike_an_earlier_investigation_left_open_is_confirmed_before_a_de
             confirm_sender_domain_params("brand.example", "brand-hiring.example", "Noida"),
             "google/confirm_second_official.json",
         ),
-        *A_REMAINING,
     )
     case = open_text(LOOKALIKE_LINK)
     investigate(case, provider, max_searches=2, environ=NO_ENV)
@@ -1072,7 +1104,7 @@ def test_a_person_who_says_a_fee_is_asked_after_all_gets_the_fee_red_flag_back()
 
 
 def test_run_remaining_checks_refuses_claims_changed_since_the_decisive_stop():
-    provider = fake(*A_REMAINING)
+    provider = fake()
     case = open_sample("a")
     investigate(case, provider, environ=NO_ENV)
 

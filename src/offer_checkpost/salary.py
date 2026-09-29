@@ -81,9 +81,14 @@ _PREFIX = (
     r"(?:(?:of|is|hai|upto|up\s+to|around|approx\.?)\s+)?)?"
 )
 _RANGE = rf"(?:\s*(?:[-–—~‑]|\bto\b|\bse\b)\s*{_amount('b')})?"
-_QUALIFIER = r"(?:\s*(?:ctc|salary|stipend|fixed|gross|net|in[- ]hand|take[- ]home)(?![a-z]))?"
+# A qualifier or a period stays on the figure's own line: "₹1.40 LPA – ₹1.80 LPA" followed by a
+# line "Monthly Salary: ₹11,700" is a year's pay, and "Monthly" labels the next figure.
+_SAME_LINE = r"[^\S\n]*"
+_QUALIFIER = (
+    rf"(?:{_SAME_LINE}(?:ctc|salary|stipend|fixed|gross|net|in[- ]hand|take[- ]home)(?![a-z]))?"
+)
 _SUFFIX = (
-    r"(?:\s*(?:(?:per|a|an|every|har|prati)\s+|/\s*)?(?:"
+    rf"(?:{_SAME_LINE}(?:(?:per|a|an|every|har|prati)\s+|/\s*)?(?:"
     rf"(?P<per_month>{_either(['month', 'mo', 'mth', 'monthly', 'mahina', 'mahine', 'maheena'])}"
     r"|p\.?m\.?)"
     rf"|(?P<per_year>{_either(['year', 'yr', 'annum', 'annual', 'annually', 'yearly'])}"
@@ -165,11 +170,11 @@ def _read(m: re.Match[str]) -> Pay | None:
     if not (marked or explicit):
         return None
 
-    lpa = "lpa" in (unit_a, unit_b)
-    if m["per_month"]:
-        months = 1
-    elif m["per_year"] or lpa:
+    # LPA carries its own period, lakhs per annum, whatever word follows it.
+    if "lpa" in (unit_a, unit_b) or m["per_year"]:
         months = 12
+    elif m["per_month"]:
+        months = 1
     elif m["pre_month"]:
         months = 1
     elif m["pre_year"]:

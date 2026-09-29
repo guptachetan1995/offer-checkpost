@@ -1,0 +1,174 @@
+{
+  "recordedAt": "2026-09-29T13:45:24+05:30",
+  "engine": "google_maps",
+  "params": {
+    "engine": "google_maps",
+    "type": "search",
+    "q": "Siemens",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Bengaluru, India",
+    "z": "12",
+    "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+  },
+  "response": {
+    "local_results": [
+      {
+        "title": "Siemens",
+        "place_id": "ChIJLXUj3YRsrjsRVBowDRoJSS8",
+        "type": "Software company",
+        "address": "No 105, Hosur Rd, Keonics, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 4.4,
+        "reviews": 2227
+      },
+      {
+        "title": "Siemens",
+        "place_id": "ChIJY22HKdE9rjsRZHShnizhRRg",
+        "type": "Engineer",
+        "address": "A Block, Dr Rajkumar Rd, Rajajinagar, Bengaluru, Karnataka 560055",
+        "rating": 4.4,
+        "reviews": 26
+      },
+      {
+        "title": "Siemens Ltd.",
+        "place_id": "ChIJK6Oj3IMTrjsRtxIfRlzBvwo",
+        "type": "Corporate office",
+        "address": "Rga Tech Park Utc Eco Energy, Carmelaram, Hadosiddapura, Chikkakannalli, Karnataka 560035",
+        "rating": 4.6,
+        "reviews": 60
+      },
+      {
+        "title": "Siemens Ltd",
+        "place_id": "ChIJO-UQI3kWrjsRsGW3iTFwv7Y",
+        "type": "Engineer",
+        "address": "1st Floor, 49, St Mark's Rd, Shanthala Nagar, Ashok Nagar, Bengaluru, Karnataka 560001",
+        "rating": 4.7,
+        "reviews": 40
+      },
+      {
+        "title": "Siemens Energy India Limited",
+        "place_id": "ChIJcaEhIgIQrjsR8yvusJHnP6s",
+        "type": "Engineer",
+        "address": "Devanahalli Road, Off Old Madras Road, Chimasandra, Karnataka 560049",
+        "rating": 4,
+        "reviews": 21
+      },
+      {
+        "title": "Siemens Rail Automation Pvt. Ltd.",
+        "place_id": "ChIJIzpkW41srjsRKIHDs_OqObM",
+        "type": "Electronics manufacturer",
+        "address": "66/11, BTM Phase 1, Phase II, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 4.5,
+        "reviews": 22
+      },
+      {
+        "title": "Siemens Industry Software (India) Private Limited",
+        "place_id": "ChIJPYNgH48XrjsRVj_eXnHAdDk",
+        "type": "Software company",
+        "address": "Brigade Magnum,B-301, International Airport Road, Amruthahalli- Kodigehalli Gate near, Hebbal, Bengaluru, Karnataka 560048",
+        "rating": 4.6,
+        "reviews": 39
+      },
+      {
+        "title": "Siemens Gamesa Renewable Energy",
+        "place_id": "ChIJqWBBzGFtrjsRa1grzDVlEzo",
+        "type": "Green energy supplier",
+        "address": "3rd & 4th floor, RMWH+98F, Infront of TCS, Phase II, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 4.6,
+        "reviews": 140
+      },
+      {
+        "title": "Siemens",
+        "place_id": "ChIJl1JClRAVrjsRH9bvXMeMxqQ",
+        "type": "Engineer",
+        "address": "Hosur Rd, Koramangala, Bengaluru, Karnataka 560030"
+      },
+      {
+        "title": "Siemens Experience Centre",
+        "place_id": "ChIJf6mvPmwVrjsRtKN2Ec-knHo",
+        "type": "Corporate office",
+        "address": "8, 15th Cross Rd, Jeewan Sathi Colony, JP Nagar Phase 6, J. P. Nagar, Bengaluru, Karnataka 560078",
+        "rating": 4.4,
+        "reviews": 59
+      },
+      {
+        "title": "Siemens Technology And Services Private Limited",
+        "place_id": "ChIJu3N5P5dsrjsRna9oPz8fXQ0",
+        "address": "84, Hosur Rd, Zuzuvadi, Central Silk Board Colony, Stage 2, Electronic City, Bengaluru, Karnataka 560068",
+        "rating": 4.5,
+        "reviews": 11
+      },
+      {
+        "title": "Siemens Healthcare Pvt Ltd, Factory",
+        "place_id": "ChIJIa6qq1a3vzsR9BoBTJl0Uoc",
+        "type": "Manufacturer",
+        "address": "RMXG+9XG, 2nd Cross Rd, Phase II, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 4.6,
+        "reviews": 53
+      },
+      {
+        "title": "Siemens",
+        "place_id": "ChIJLz8YwsIVrjsRshyP3dbVcA0",
+        "type": "Engineer",
+        "address": "83, Sarakki Industrial Layout, 5th Block, Koramangala, Bengaluru, Karnataka 560078",
+        "rating": 5,
+        "reviews": 1
+      },
+      {
+        "title": "Siemens Industries Software",
+        "place_id": "ChIJZe-uhHwTrjsRFySEpj--Bw0",
+        "type": "Software company",
+        "address": "5th floor, JUPITER BLOCK, PRESTIGE TECH PARK, Outer Ring Rd, Kadubeesanahalli, Bengaluru, Karnataka 560103",
+        "rating": 5,
+        "reviews": 1
+      },
+      {
+        "title": "Siemens Healthineers",
+        "place_id": "ChIJqfX7Io1srjsRJq7VYC9vWks",
+        "type": "Software company",
+        "address": "Gold Hill Supreme Park 2, Joggers Ln, Phase II, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 4.7,
+        "reviews": 689
+      },
+      {
+        "title": "Siemens Healthineers LLP @ Pritech Park SEZ",
+        "place_id": "ChIJyWw6Dy8TrjsRVIXJcwnKZ0I",
+        "type": "Corporate office",
+        "address": "Tower 11, ECOSPACE BUSINESS PARK, Tower 11, Pritech Park SEZ, Eco Space Campus, Ecospace Internal Rd, Adarsh Palm Retreat Villas, Bellandur, Bengaluru, Karnataka 560103",
+        "rating": 4.7,
+        "reviews": 15
+      },
+      {
+        "title": "Siemens Financial Services Pvt. Ltd.",
+        "place_id": "ChIJiZuP6KEXrjsRvmfXxrquXp0",
+        "type": "Financial institution",
+        "address": "3rd, 49, St Mark's Rd, Shanthala Nagar, Ashok Nagar, Bengaluru, Karnataka 560001",
+        "rating": 4,
+        "reviews": 5
+      },
+      {
+        "title": "Siemens",
+        "place_id": "ChIJXZQJCiYXrjsRZMmeqhTDSZA",
+        "type": "Software company",
+        "address": "Prestige Trade Towers, 46, Palace Rd, High Grounds, Bengaluru, Karnataka 560001"
+      },
+      {
+        "title": "Siemens Energy India Limited",
+        "place_id": "ChIJE_bwQwBtrjsRjvsh5zfM2g4",
+        "type": "Corporate office",
+        "address": "Gold Hill Supreme Park, Phase II, Electronic City, Konappana Agrahara, Karnataka 560100",
+        "rating": 5,
+        "reviews": 2
+      },
+      {
+        "title": "Siemens Factory and DC Building",
+        "place_id": "ChIJ10dAdABtrjsRSb5cY1LD_iY",
+        "type": "Corporate office",
+        "address": "RM5W+XQ6, Tranquil City, Bommasandra Village, Bommasandra, Bengaluru, Karnataka 560099",
+        "rating": 4.6,
+        "reviews": 9
+      }
+    ]
+  }
+}

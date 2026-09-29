@@ -1,0 +1,225 @@
+{
+  "recordedAt": "2026-09-29T13:44:59+05:30",
+  "engine": "google_jobs",
+  "params": {
+    "engine": "google_jobs",
+    "q": "Application Support Engineer Siemens",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Bengaluru, India",
+    "json_restrictor": "jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}"
+  },
+  "response": {
+    "jobs_results": [
+      {
+        "title": "Application Support Engineer",
+        "company_name": "Siemens",
+        "location": "Bengaluru, Karnataka",
+        "extensions": [
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://jobs.sw.siemens.com/bangalore-ind/application-support-engineer/EFA2906C942646FCA1909D1C237F55AD/job/?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.accenture.com/ie-en/careers/jobdetails?id=ATCI-R1-S2024040_en&utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.accenture.cn/cn-zh/careers/jobdetails?id=ATCI-5384656-S1962774_en&utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://jobs.concentrix.com/job/?id=R1764771&utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.bayt.com/ar/%D8%A7%D9%84%D9%87%D9%86%D8%AF/jobs/application-support-engineer-74840434/?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://career.mlp.com/careers/job/755958643439-application-support-engineer-bangalore-karnataka-india?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://internshala.com/job/detail/application-support-engineer-job-in-bangalore-at-artech-llc1788481860?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.tcsion.com/jobs/Ahana-Systems-and-Solutions-Pvt-Ltd/Application-Support-Engineer-22203/?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Application Engineer Solido DE (Bengaluru)",
+        "company_name": "Siemens",
+        "location": "Bengaluru, Karnataka",
+        "extensions": [
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://www.shine.com/jobs/application-engineer-solido-de-bengaluru/siemens/19472307?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "ALM Application Operational Support & Test Management Professional [COSIMA]",
+        "company_name": "Siemens",
+        "location": "Bengaluru, Karnataka",
+        "extensions": [
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://en.wizbii.com/company/siemens/job/alm-application-operational-support-test-management-professional-cosima?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Senior Support Engineer",
+        "company_name": "Siemens",
+        "location": "Karnataka",
+        "extensions": [
+          "7 days ago",
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://bebee.com/in/jobs/senior-support-engineer-siemens--fj-2376092330?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://notify.careers/postings/50923a77-d801-4fe3-840f-db499e56b09c?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://bandana.com/jobs/d532c3c7-9084-4d3c-a62e-79404e2eca11?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://en-in.whatjobs.com/jobs/senior-support-engineer/karnataka?id=243874833&utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Technical Sales Support Professional",
+        "company_name": "Siemens",
+        "location": "Mumbai, Maharashtra",
+        "extensions": [
+          "8 days ago",
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://in.linkedin.com/jobs/view/technical-sales-support-professional-at-siemens-4469925599?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://in.jooble.org/jdp/8451303571704712561?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.simplyhired.co.in/job/hSUOeop3kEwJJw95vCYlLixc_6LlIWEFKibQpc8ocFzU1ITF5iGDYw?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://bebee.com/in/jobs/technical-sales-support-professional-siemens-mumbai-city--fj-2374225850?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://in.jobrapido.com/jobpreview/6694405268307968000?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Advanced Customer Support Engineer – Teamcenter",
+        "company_name": "Siemens AG",
+        "location": "Yelwadi, Maharashtra",
+        "extensions": [
+          "7 days ago",
+          "₹12L–₹18L a year",
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://www.jobleads.com/in/job/advanced-customer-support-engineer-teamcenter--pune-district--e93c9e61349d0caefd4993557b4994632?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Remote Support Engineer",
+        "company_name": "Siemens",
+        "location": "Thane, Maharashtra",
+        "extensions": [
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://www.shine.com/jobs/remote-support-engineer/siemens/19398019?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Solution Engineer",
+        "company_name": "Siemens",
+        "location": "Gurugram, Haryana",
+        "extensions": [
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://in.linkedin.com/jobs/view/solution-engineer-at-siemens-4451902838?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.instahyre.com/job-435492-solution-engineer-at-nected-gurgaon/?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://startup.jobs/solution-engineer-naehas-7216863?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.simplyhired.co.in/job/-0TfzFgqFM_h41SOERtuL3WCC8aodbQ3ZYo2f0RR0MJ6wmhg4eiWvA?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.foundit.in/job/solution-engineer-siemens-gurugram-67435631?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://in.jooble.org/jdp/5496344982126825539?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://bebee.com/in/jobs/solution-engineer-naehas-gurugram--fj-2323970999?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://apply.workable.com/naehas/j/3024E7EE5F/?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Power Diagnostics® Services - Performance Monitoring Engineer",
+        "company_name": "Siemens",
+        "location": "Gurugram, Haryana",
+        "extensions": [
+          "6 days ago",
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://in.linkedin.com/jobs/view/power-diagnostics%C2%AE-services-performance-monitoring-engineer-at-siemens-4469490085?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://in.jooble.org/jdp/8147304610517868187?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.jobleads.com/in/job/power-diagnostics-services-performance-monitoring-engineer--gurugram-district--ef6a24a226c6d235a808664d5a735bcdb?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          },
+          {
+            "link": "https://www.recruit.net/job/power-diagnostics-services-performance-monitoring-jobs/66F813CCBA2FF8D9?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      },
+      {
+        "title": "Application Service & Support",
+        "company_name": "Siemens",
+        "location": "Nagpur, Maharashtra",
+        "extensions": [
+          "₹1L–₹50L a year",
+          "Full–time"
+        ],
+        "apply_options": [
+          {
+            "link": "https://www.jobaaj.com/job/siemens-application-service-support-maharashtra-nagpur-3-to-7-years-972630?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -7,47 +7,51 @@ from offer_checkpost.extract import TEXT_RULES, extract_claims, text_rules
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples" / "offers"
 NO_AMOUNT = "fee named, no amount"
+# Sample B is a real opening: its one link is the employer's own careers page, on the employer's
+# official domain. Every other contact and link in a sample is synthetic.
+REAL_LINKS = {"b.txt": "https://jobs.sw.siemens.com/"}
 
-# Sample A's employer "Brand" and Sample B's "Contoso" are placeholders, and so is Sample C's
-# city: a one-off live SerpApi check picks the real ones, and these rows change with the text.
+# The three demo samples, as recorded from live SerpApi: A impersonates HCLTech, B is a real
+# Siemens opening that names no pay and links only to Siemens's own careers site, and C's firm
+# is invented. These rows change with the text, and so do the recordings.
 SAMPLES = {
     "a.txt": dict(
-        company="Brand",
+        company="HCLTech",
         role="Data Entry Executive (WFH)",
         city="Noida",
         pay=38000,
         fee=2499,
-        contacts=["hr.onboarding@brand-careers.example"],
+        contacts=["hr.onboarding@hcltech-careers.example"],
         links=[],
         rules=["fee_requested"],
     ),
     "b.txt": dict(
-        company="Contoso",
-        role="Graduate Engineer Trainee",
-        city="Pune",
-        pay=35000,
+        company="Siemens",
+        role="Application Support Engineer",
+        city="Bengaluru",
+        pay=None,
         fee=None,
-        contacts=["campus.hiring@contoso.example"],
-        links=["careers.contoso.example"],
+        contacts=[],
+        links=["jobs.sw.siemens.com"],
         rules=[],
     ),
     "c.txt": dict(
-        company="Zorvanta Support Services Pvt. Ltd",
+        company="Kavrellon Support Services Pvt. Ltd",
         role="Customer Support Executive",
         city="Indore",
         pay=42000,
         fee=None,
-        contacts=["+91 9XXXX XXXXX", "joinus@zorvanta-support.example"],
+        contacts=["+91 9XXXX XXXXX", "joinus@kavrellon-support.example"],
         links=[],
         rules=["sensitive_docs_early", "chat_only_interview"],
     ),
     "a-forwarded.txt": dict(
-        company="Brand",
+        company="HCLTech",
         role="Data Entry Executive (WFH)",
         city="Noida",
         pay=38000,
         fee=2499,
-        contacts=["hr.onboarding@brand-careers.example"],
+        contacts=["hr.onboarding@hcltech-careers.example"],
         links=[],
         rules=["fee_requested"],
     ),
@@ -162,12 +166,12 @@ SAMPLES = {
         rules=[],
     ),
     "lookalike-kit-charges.txt": dict(
-        company="Brand",
+        company="HCLTech",
         role="Operations Associate",
         city="Gurugram",
         pay=45000,
         fee=4500,
-        contacts=["careers@brnad.example"],
+        contacts=["careers@hlctech.example"],
         links=[],
         rules=["fee_requested"],
     ),
@@ -295,11 +299,12 @@ def test_sample_spans_are_exact(name):
 
 
 @pytest.mark.parametrize("name", sorted(SAMPLES))
-def test_sample_contacts_and_links_are_all_synthetic(name):
+def test_sample_contacts_and_links_are_all_synthetic_but_a_real_offers_careers_link(name):
     text = sample(name)
     claims = extract_claims(text)
     assert all(c["synthetic"] for c in claims["contacts"])
-    assert all(link["synthetic"] for link in claims["links"])
+    real = [link["value"] for link in claims["links"] if not link["synthetic"]]
+    assert all(name in REAL_LINKS and value.startswith(REAL_LINKS[name]) for value in real), real
     for domain in re.findall(r"@((?:[\w-]+\.)+[a-z]+)", text):
         assert domain.endswith(".example")
     assert not re.search(r"\d(?:[ .-]?\d){9}", text), "an unmasked 10-digit number"
@@ -312,7 +317,7 @@ def test_sample_a_matches_the_worked_example():
     assert claims["contacts"] == [
         {
             "kind": "email",
-            "value": "hr.onboarding@brand-careers.example",
+            "value": "hr.onboarding@hcltech-careers.example",
             "span": claims["contacts"][0]["span"],
             "synthetic": True,
         }

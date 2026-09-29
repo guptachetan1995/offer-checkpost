@@ -87,7 +87,7 @@ SAMPLES_DIR = _ENTRY / "samples" / "offers"
 # The demo samples the page's "Try a sample" menu offers, each described without a verdict.
 SAMPLES = (
     ("a", "Work-from-home data entry offer"),
-    ("b", "Graduate engineer trainee interview invitation"),
+    ("b", "Application support engineer interview invitation"),
     ("c", "Customer support offer for freshers"),
 )
 

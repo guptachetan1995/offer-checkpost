@@ -28,6 +28,9 @@ from offer_checkpost.tools import TOOLS, listing
 from offer_checkpost.verbs import VERBS
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer; any
+# other sample is read from samples/offers.
+STAND_INS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "offers"
 NOW = datetime(2026, 10, 3, 10, 2, 11, tzinfo=IST)
 LABELS = list(BOARD_LABELS)
 
@@ -147,7 +150,8 @@ def store(fake_planner):
 
 
 def sample(name):
-    return (SAMPLES / f"{name}.txt").read_text(encoding="utf-8")
+    stand_in = STAND_INS / f"{name}.txt"
+    return (stand_in if stand_in.exists() else SAMPLES / f"{name}.txt").read_text(encoding="utf-8")
 
 
 def ok(store, tool, args, actor="human"):

@@ -1,0 +1,12 @@
+{
+  "recordedAt": "2026-09-29T13:36:57+05:30",
+  "engine": "google_news",
+  "params": {
+    "engine": "google_news",
+    "q": "\"Kavrellon Support Services\" job offer (fake OR scam OR fraud)",
+    "gl": "in",
+    "hl": "en",
+    "json_restrictor": "news_results[].{title,link,source.name,date}"
+  },
+  "response": {}
+}

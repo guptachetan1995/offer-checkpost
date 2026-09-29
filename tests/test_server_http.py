@@ -51,6 +51,8 @@ pytestmark = pytest.mark.loopback
 
 ENTRY = Path(__file__).resolve().parents[1]
 SAMPLES = ENTRY / "samples" / "offers"
+# The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
+STAND_INS = ENTRY / "tests" / "fixtures" / "offers"
 KEY_SHAPED = re.compile(r"[0-9a-fA-F]{64}")
 OUTSIDE = "a file outside web/"
 LIST = {"tool": "list_cases", "args": {}}
@@ -146,7 +148,7 @@ class App:
         return envelope["result"]
 
     def opened(self, sample) -> str:
-        case = self.ok("open_case", {"text": (SAMPLES / f"{sample}.txt").read_text("utf-8")})
+        case = self.ok("open_case", {"text": (STAND_INS / f"{sample}.txt").read_text("utf-8")})
         self.ok("update_claims", {"case_id": case["id"], "confirm": True})
         return case["id"]
 
@@ -471,7 +473,7 @@ def test_a_request_without_the_session_cannot_claim_to_be_the_person(app):
 
 
 def test_without_the_session_an_agent_tool_runs_as_the_agent(app):
-    text = (SAMPLES / "a.txt").read_text("utf-8")
+    text = (STAND_INS / "a.txt").read_text("utf-8")
 
     reply = app.request("POST", "/api/invoke", {"tool": "open_case", "args": {"text": text}})
 

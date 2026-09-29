@@ -1,0 +1,23 @@
+{
+  "recordedAt": "2026-09-29T13:45:25+05:30",
+  "engine": "google_news",
+  "params": {
+    "engine": "google_news",
+    "q": "\"Siemens\" job offer (fake OR scam OR fraud)",
+    "gl": "in",
+    "hl": "en",
+    "json_restrictor": "news_results[].{title,link,source.name,date}"
+  },
+  "response": {
+    "news_results": [
+      {
+        "title": "IIT Madras PhD holder loses Rs 3.1L in job scam",
+        "link": "https://www.newindianexpress.com/states/telangana/2025/Dec/08/iit-madras-phd-holder-loses-rs-31l-in-job-scam",
+        "source": {
+          "name": "The New Indian Express"
+        },
+        "date": "12/08/2025, 08:00 AM, +0000 UTC"
+      }
+    ]
+  }
+}

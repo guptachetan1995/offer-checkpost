@@ -42,6 +42,48 @@
     "fixture": "google/confirm_named_in_notice.json"
   },
   {
+    "sample": "a",
+    "check": "check_job_listings",
+    "params": {
+      "engine": "google_jobs",
+      "q": "Data Entry Executive Brand",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Noida, India",
+      "json_restrictor": "jobs_results[].{title,company_name,location,detected_extensions.salary,extensions,description,apply_options[].link}"
+    },
+    "fixture": "google_jobs/listings_empty.json"
+  },
+  {
+    "sample": "a",
+    "check": "check_office",
+    "params": {
+      "engine": "google_maps",
+      "type": "search",
+      "q": "Brand",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "location": "Noida, India",
+      "z": "12",
+      "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+    },
+    "fixture": "google_maps/office_empty.json"
+  },
+  {
+    "sample": "a",
+    "check": "check_scam_reports",
+    "params": {
+      "engine": "google_news",
+      "q": "\"Brand\" job offer (fake OR scam OR fraud)",
+      "gl": "in",
+      "hl": "en",
+      "json_restrictor": "news_results[].{title,link,source.name,date}"
+    },
+    "fixture": "google_news/reports_brand.json"
+  },
+  {
     "sample": "b",
     "check": "lookup_official_site",
     "params": {

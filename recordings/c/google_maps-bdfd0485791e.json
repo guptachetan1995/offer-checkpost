@@ -1,0 +1,16 @@
+{
+  "recordedAt": "2026-09-29T13:36:52+05:30",
+  "engine": "google_maps",
+  "params": {
+    "engine": "google_maps",
+    "type": "search",
+    "q": "Kavrellon Support Services",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Indore, India",
+    "z": "12",
+    "json_restrictor": "local_results[].{title,place_id,type,address,rating,reviews},place_results.{title,place_id,type,address,rating,reviews}"
+  },
+  "response": {}
+}

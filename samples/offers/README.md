@@ -7,26 +7,40 @@ tests fail.
 
 ## The three demo samples
 
+The demo runs these three, and replay mode answers them with no key: their SerpApi responses
+were recorded with a real key on 29 September 2026 and are in `recordings/`. The messages are
+fictional. Two of the employers are real, on purpose.
+
 | File | What it is |
 |---|---|
-| `a.txt` | **Sample A.** Impersonates a large employer: work-from-home data entry at ₹38,000/month, a "refundable registration fee" of ₹2,499, and a recruiter on a look-alike domain. |
-| `b.txt` | **Sample B.** A real opening: the recruiter writes from the employer's own domain, the office is named, and no fee is asked. |
-| `c.txt` | **Sample C.** An invented firm with no web presence: customer support at ₹42,000/month for freshers, a Telegram-only interview, and an Aadhaar and bank-passbook photo asked for up front. No fee. |
+| `a.txt` | **Sample A.** A scam that impersonates **HCLTech**: work-from-home data entry at ₹38,000/month, a "refundable registration fee" of ₹2,499, and a recruiter on the look-alike `hcltech-careers.example`. |
+| `b.txt` | **Sample B.** A real opening: **Siemens**'s Application Support Engineer role in Bengaluru (Req ID 509009), open when it was recorded. Its one link is that listing on Siemens's own careers site; no fee is asked. |
+| `c.txt` | **Sample C.** An invented firm, Kavrellon Support Services, with no web presence: customer support in Indore at ₹42,000/month for freshers, a Telegram-only interview, and an Aadhaar and bank-passbook photo asked for up front. No fee. |
 
-### Placeholders
+### Why these names
 
-Three names in these samples are stand-ins. A one-off live SerpApi check replaces them before
-anything is recorded or filmed:
+- **HCLTech, in Sample A, is the victim, not the sender.** Scam offers borrow the names of large
+  employers, and the strongest evidence against one is the employer's own words. HCLTech's own
+  site carries a recruitment-fraud warning that Google indexes, "we never ask for recruitment
+  fees", so the check quotes the employer contradicting the message, from the employer's own
+  domain, with the date SerpApi returned it. The message, its sender and the sender's
+  `.example` domain are invented; nothing in it comes from HCLTech.
+- **Siemens, in Sample B, is a real opening**, because "No contradictions found" only means
+  something against a real listing and a real office. The message is written for the demo, but
+  it invents nothing about Siemens: it names no pay figure and no recruiter, and its only link
+  is the listing on the employer's official domain.
+- **Kavrellon Support Services, in Sample C, is invented**, and no business by that name
+  turned up: a Google search found nothing for it, and the recorded SerpApi searches for it
+  (Search, Maps, News) came back empty. An invented firm keeps red flags off any real small
+  business.
+- **Indore** is Sample C's city because Google Jobs showed pay on enough of its
+  customer-support listings for the pay benchmark (6 of 10 when it was recorded).
+- `a-forwarded.txt` and `lookalike-kit-charges.txt` reuse Sample A's employer. The first makes
+  Sample A's searches, so replay answers it; the second, from `hlctech.example` (two letters
+  swapped) in Gurugram, needs a key.
 
-- **`Brand`** (Sample A's employer, with its look-alike domains `brand-careers.example` and
-  `brnad.example`). The real employer must have a recruitment-fraud notice on its own site that
-  Google indexes and that says it never charges candidates, so the evidence is the employer's
-  own words.
-- **`Contoso`** (Sample B's employer, on `contoso.example`). The real one needs a current
-  opening on Google Jobs with an apply link on its own domain, and an office on Google Maps.
-- **`Indore`** (Sample C's city). Indore, Pune or Jaipur, whichever has the most Google Jobs
-  listings that show pay. Sample C's firm, **Zorvanta Support Services**, is kept only if the
-  same check finds no business with that name.
+The tests keep synthetic stand-ins of the three, with a made-up employer in each, in
+`tests/fixtures/offers/`: the fake provider's fixtures answer those, never these.
 
 ## The variants
 
@@ -59,9 +73,11 @@ anything is recorded or filmed:
   The samples spell it several ways (`+91-8XXXX-XXXXX`, `+917XXXXXXXXX`, `09XXXXXXXXX`,
   `(+91) 6XXXX XXXXX`) so the tests cover each `+91` format. The extractor marks a masked
   number `synthetic`, and synthetic contacts are never searched.
-- **Every email address and link uses the reserved `.example` domain** (RFC 2606). Nobody can
-  register a name under it, so no mail or visit reaches anyone. These contacts are `synthetic`
+- **Every email address and link uses the reserved `.example` domain** (RFC 2606), except
+  Sample B's link to the real listing on Siemens's own careers site. Nobody can register a
+  name under `.example`, so no mail or visit reaches anyone. These contacts are `synthetic`
   too.
-- **Company names are invented**, apart from the three placeholders above. Any resemblance to
-  a real business is a coincidence. No recruiter is named.
+- **Company names are invented**, apart from HCLTech and Siemens in the demo samples and the
+  two variants of Sample A. Any resemblance to a real business is a coincidence. No recruiter
+  is named.
 - The Hinglish is romanised, as it's usually typed. The extractor doesn't read Devanagari.
