@@ -3,7 +3,10 @@
 The UI's buttons, the CLI, the planner's own checks and an MCP client all call it; none of
 them has a second path to the state. In order, it:
 
-1. refuses an actor other than ``"human"`` (a person's click) or ``"agent"``;
+1. refuses an actor other than ``"human"`` (a person's click) or ``"agent"``, and a call whose
+   request ``claimed`` to be anyone but ``actor``: the server takes the actor from the
+   session, never from the request, and a request that names another is logged as the
+   session's, refused;
 2. refuses a human-only verb for any actor but ``"human"``, before anything else runs;
 3. refuses a name that is neither an agent tool nor a verb;
 4. checks ``args`` against the tool's schema, refusing a missing, mistyped or unknown field;
@@ -15,7 +18,8 @@ them has a second path to the state. In order, it:
 
 Every call, refused or not, lands in the activity log with its actor and outcome, and a
 nested call (the planner's checks inside ``investigate``) is logged after the call that
-started it. What comes back is a copy, so no caller can reach into the state through it.
+started it, marked ``planner``. What comes back is a copy, so no caller can reach into the
+state through it.
 """
 
 from __future__ import annotations
@@ -30,23 +34,36 @@ from offer_checkpost.store import ACTORS, Refused, Store
 from offer_checkpost.tools import TOOLS, Call, Handler
 from offer_checkpost.verbs import VERBS
 
+# ``claimed`` for a request that named no actor, as every caller but the server's is.
+UNCLAIMED: Any = object()
+CLAIMED = (
+    "who is calling comes from the session, not from the request: a request cannot claim to be "
+    "the person. Leave actor out; nothing was run"
+)
+
 
 def invoke(
-    tool: str, args: Any, actor: str, *, store: Store, by_planner: bool = False
+    tool: str,
+    args: Any,
+    actor: str,
+    *,
+    store: Store,
+    by_planner: bool = False,
+    claimed: Any = UNCLAIMED,
 ) -> dict[str, Any]:
     """Runs one tool or verb. Returns ``{"ok": True, "result": ...}``, or
     ``{"ok": False, "outcome": "refused" | "error", "error": "<why>"}``; ``error`` is the
     search provider's fixed message when a search failed, never exception text."""
     with store.lock:
         try:
-            schema, handler = _route(tool, actor)
+            schema, handler = _route(tool, actor, claimed)
             if problems := validate(schema, args):
                 raise Refused(f"{tool} was refused: {'; '.join(problems)}")
         except Refused as refusal:
-            store.log(actor, tool, args, "refused", refusal.message)
+            store.log(actor, tool, args, "refused", refusal.message, planner=by_planner)
             return {"ok": False, "outcome": "refused", "error": refusal.message}
 
-        entry = store.log(actor, tool, args, "running")
+        entry = store.log(actor, tool, args, "running", planner=by_planner)
         try:
             result = handler(Call(store, actor, by_planner), copy.deepcopy(args))
         except (Refused, PlanRefused) as refusal:
@@ -64,9 +81,11 @@ def invoke(
         return {"ok": True, "result": copy.deepcopy(result)}
 
 
-def _route(tool: Any, actor: Any) -> tuple[dict[str, Any], Handler]:
+def _route(tool: Any, actor: Any, claimed: Any) -> tuple[dict[str, Any], Handler]:
     if actor not in ACTORS:
         raise Refused("unknown actor: a call comes from 'human' (a person) or 'agent'")
+    if claimed is not UNCLAIMED and claimed != actor:
+        raise Refused(CLAIMED)
     name = tool if isinstance(tool, str) else None
     if name in VERBS:
         verb = VERBS[name]

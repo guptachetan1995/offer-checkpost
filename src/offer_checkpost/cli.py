@@ -2,9 +2,13 @@
 
     python -m offer_checkpost serve [--port N] [--provider fake|replay]
     python -m offer_checkpost investigate <file> [--provider fake|replay] [--as human|agent]
+    python -m offer_checkpost mcp [--url http://127.0.0.1:8741]
 
 ``serve`` runs the web app on 127.0.0.1 (port ``--port``, else ``PORT``, else 8741) until
-Ctrl-C. It prints one line: the address to open and the provider serving searches.
+Ctrl-C. It prints the address to open, with the link token that makes the browser opening it
+the person, and the provider serving searches; then one line saying so. The address works
+once: each time it is opened, ``serve`` prints the next one, which makes another browser the
+person instead. Anything else that talks to the server is the agent.
 
 ``investigate`` does what a person does in the app, one ``invoke`` call at a time: it opens a
 case from the offer message in <file>, confirms the claims as they were extracted,
@@ -14,11 +18,16 @@ log. ``--as agent`` makes every call the agent's, as an MCP client's would be; t
 own searches are the agent's either way. Nothing is published: that is a person's click in
 the app.
 
-For both, without ``--provider``, the provider is the one ``OFFER_CHECKPOST_PROVIDER`` names
-in the environment, else live when ``SERPAPI_KEY`` is set there and replay when it isn't.
-``fake`` serves the synthetic test fixtures; ``replay`` serves recorded SerpApi responses and
-never makes one up. Run as a program, the environment is the process's own over the settings in
-``.env`` in the working directory, so a key kept in ``.env`` is found without being exported.
+``mcp`` serves the agent's tools to an MCP client over stdio, from the app ``serve`` runs at
+``--url`` (else on 127.0.0.1 at ``PORT``, else 8741); see ``mcp_server``. Every call it makes is
+the agent's. It takes the app's bare address: the one with the token is the person's.
+
+For ``serve`` and ``investigate``, without ``--provider``, the provider is the one
+``OFFER_CHECKPOST_PROVIDER`` names in the environment, else live when ``SERPAPI_KEY`` is set
+there and replay when it isn't. ``fake`` serves the synthetic test fixtures; ``replay`` serves
+recorded SerpApi responses and never makes one up. Run as a program, the environment is the
+process's own over the settings in ``.env`` in the working directory, so a key kept in ``.env``
+is found without being exported.
 """
 
 from __future__ import annotations
@@ -30,7 +39,9 @@ import textwrap
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
+from offer_checkpost import mcp_server
 from offer_checkpost.invoke import invoke
 from offer_checkpost.providers import FakeSearchProvider, ReplaySearchProvider, SearchError
 from offer_checkpost.rules import RULES
@@ -41,6 +52,14 @@ PROVIDERS = {"fake": FakeSearchProvider.from_fixtures, "replay": ReplaySearchPro
 WIDTH = 99
 _LABEL = {"skipped": "skip", "reordered": "reorder", "stopped": "stop", "reused": "reuse"}
 _DETAIL = " " * 9
+SESSION_LINE = (
+    "That address works once, and makes the browser that opens it the person; anything else "
+    "talking to this server is the agent."
+)
+OPENED_LINE = (
+    "The address was opened: that browser is the person. To make another browser the person "
+    "instead, open {url}"
+)
 _PROVIDER_HELP = (
     "fake: the synthetic test fixtures; replay: recorded SerpApi responses. Default: "
     "OFFER_CHECKPOST_PROVIDER, else live with SERPAPI_KEY set in the environment or .env, else "
@@ -54,6 +73,8 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] = os.envi
     if args.command == "serve":
         port = _port(parser, args.port, environ)
         return serve(_store(parser, args, environ), port)
+    if args.command == "mcp":
+        return mcp_server.run(_app_url(parser, args.url, environ))
     try:
         text = args.file.read_text(encoding="utf-8")
     except OSError as e:
@@ -111,6 +132,43 @@ def _port(parser: argparse.ArgumentParser, flag: int | None, environ: Mapping[st
     return port
 
 
+def _app_url(parser: argparse.ArgumentParser, flag: str | None, environ: Mapping[str, str]) -> str:
+    """The running app's address for ``mcp``: ``flag``, else 127.0.0.1 at ``PORT``, else 8741.
+    Only the app's own bare address is taken: a path or query (the token address ``serve``
+    prints is the person's, and the adapter is the agent) or another host is a usage error.
+    ``localhost`` becomes 127.0.0.1: it can resolve to ::1 first, where the app doesn't listen
+    and any other program may, and would then get the pasted messages and serve its own tool
+    descriptions."""
+    if flag is None:
+        port = _port(parser, None, environ)
+        if port == 0:
+            parser.error(
+                "PORT is 0, which is no app's port: give --url http://127.0.0.1:<port>, with the "
+                "port in the address serve printed and without the token"
+            )
+        return f"http://{HOST}:{port}"
+    parts = urlsplit(flag)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    if (
+        parts.scheme != "http"
+        or parts.hostname not in (HOST, "localhost")
+        or not port
+        or parts.username is not None
+        or parts.path not in ("", "/")
+        or parts.query
+        or parts.fragment
+    ):
+        # The value isn't echoed: it may be the token address, which serve alone prints.
+        parser.error(
+            "--url must be the app's bare address, http://127.0.0.1:<port>, without the token: "
+            "the adapter is the agent, never the person"
+        )
+    return f"http://{HOST}:{port}"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m offer_checkpost",
@@ -120,8 +178,11 @@ def _parser() -> argparse.ArgumentParser:
     web = commands.add_parser(
         "serve",
         help="run the web app on 127.0.0.1 until Ctrl-C",
-        description="Serves the web app on 127.0.0.1 only, until Ctrl-C. Open the address it "
-        "prints in a browser on this machine.",
+        description="Serves the web app on 127.0.0.1 only, until Ctrl-C. Run it in your own "
+        "terminal and open the address it prints in a browser on this machine: the token in it "
+        "makes that browser the person, once, and anything else that talks to the app is the "
+        "agent. Whatever reads this command's output can act as the person, so never start it "
+        "through an agent's shell.",
     )
     web.add_argument(
         "--port",
@@ -145,6 +206,17 @@ def _parser() -> argparse.ArgumentParser:
         default="human",
         help="who makes the calls (default: human, a person at the keyboard)",
     )
+    adapter = commands.add_parser(
+        "mcp",
+        help="serve the agent's tools to an MCP client over stdio, from the running app",
+        description="Speaks MCP (JSON-RPC 2.0, one message a line) on stdin and stdout, and "
+        "passes each tool call to the app serve is running, as the agent. Start the app first.",
+    )
+    adapter.add_argument(
+        "--url",
+        help=f"the running app's address, without the token. Default: http://{HOST}:PORT, "
+        f"else http://{HOST}:{DEFAULT_PORT}",
+    )
     return parser
 
 
@@ -152,11 +224,12 @@ def serve(store: Store, port: int) -> int:
     """Serves the app for ``store`` on 127.0.0.1:``port`` until Ctrl-C, or until the server is
     shut down from another thread. Returns 0, or 1 when the port can't be listened on."""
     try:
-        server = make_server(store, HOST, port)
+        server = make_server(store, HOST, port, on_open=_opened)
     except OSError as e:
         print(f"offer_checkpost: cannot listen on {HOST}:{port}: {e.strerror}", file=sys.stderr)
         return 1
-    print(f"Offer Checkpost on http://{store.server['bind']} · {_describe(store)}", flush=True)
+    print(f"Offer Checkpost on {server.url} · {_describe(store)}")
+    print(SESSION_LINE, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -164,6 +237,10 @@ def serve(store: Store, port: int) -> int:
     finally:
         server.server_close()
     return 0
+
+
+def _opened(url: str) -> None:
+    print(OPENED_LINE.format(url=url), flush=True)
 
 
 def investigate(text: str, store: Store, actor: str, *, source: Path | str = "the message") -> int:

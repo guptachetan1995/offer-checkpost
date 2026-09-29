@@ -481,6 +481,27 @@ def test_update_claims_needs_something_to_update(store):
     assert refused(store, "update_claims", {"case_id": case_id}).startswith("nothing to update")
 
 
+def test_confirming_records_who_confirmed_and_a_persons_confirmation_stands(store):
+    case_id = ok(store, "open_case", {"text": sample("c")})["id"]
+    claims = store.cases[case_id]["claims"]
+    fields = [f for f in tools.CLAIM_FIELDS if claims[f] is not None]
+
+    def confirmed_by():
+        return {f: claims[f].get("confirmedBy") for f in fields}
+
+    ok(store, "update_claims", {"case_id": case_id, "confirm": True}, actor="agent")
+    assert set(confirmed_by().values()) == {"agent"}
+    ok(store, "update_claims", {"case_id": case_id, "confirm": True})
+    assert set(confirmed_by().values()) == {"human"}
+    ok(store, "update_claims", {"case_id": case_id, "confirm": True}, actor="agent")
+    assert set(confirmed_by().values()) == {"human"}
+
+    # A corrected claim is unconfirmed again, and whoever confirms it next is named.
+    args = {"case_id": case_id, "fields": {"city": "Pune"}, "confirm": True}
+    ok(store, "update_claims", args, actor="agent")
+    assert confirmed_by() == {f: "agent" if f == "city" else "human" for f in fields}
+
+
 # ---- what a person can do ----------------------------------------------------------------
 
 
@@ -572,6 +593,27 @@ def test_the_log_shows_who_started_a_check_and_what_the_agent_ran(ready, store):
     assert [(s["tool"], s["actor"], s["because"]) for s in trace] == [
         ("lookup_official_site", "agent", "the fake plan runs lookup_official_site"),
         ("check_office", "agent", "the fake plan runs check_office"),
+    ]
+
+
+def test_the_planners_checks_inside_a_call_are_marked_and_no_other_call_is(store):
+    """So the page tells the agent's own calls from the checks a person's click ran."""
+    investigated(store)
+    other = ok(store, "open_case", {"text": sample("a")})["id"]
+    ok(store, "update_claims", {"case_id": other, "confirm": True}, actor="agent")
+    ok(store, "lookup_official_site", {"case_id": other}, actor="agent")
+
+    rows = [(e["actor"], e["tool"], e.get("planner")) for e in store.activity_log]
+
+    assert rows == [
+        ("human", "open_case", None),
+        ("human", "update_claims", None),
+        ("human", "investigate", None),
+        ("agent", "lookup_official_site", True),
+        ("agent", "check_office", True),
+        ("human", "open_case", None),
+        ("agent", "update_claims", None),
+        ("agent", "lookup_official_site", None),
     ]
 
 

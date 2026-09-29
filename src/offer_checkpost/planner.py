@@ -132,8 +132,8 @@ TRACE_KEYS = (
 ON_REQUEST = "run on request after a decisive result"
 NO_COMPANY = "no company named: nothing to check on the web"
 UNCONFIRMED = (
-    "the claims are not confirmed yet: a person confirms or corrects them before anything is "
-    "searched"
+    "the claims are not confirmed yet: confirm or correct them (update_claims) before anything "
+    "is searched"
 )
 R1 = "R1, unknown firm"
 R2 = "R2, official sender"

@@ -887,6 +887,20 @@ a.src { font-family: var(--mono); font-size: 0.95em; }
 .log-reason { grid-column: 3 / -1; font-size: 0.82rem; color: var(--muted); }
 .r-refused .log-reason, .r-error .log-reason { color: var(--red); }
 .by-agent { background: linear-gradient(90deg, var(--surface-2), transparent 60%); }
+/* A call the page didn't make: said once, quietly, beside the log that keeps it. */
+.agent-note {
+  padding: 6px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 0.86rem;
+}
+
+/* ---- the page for a browser without the person's session ------------------------------ */
+
+.session { max-width: 620px; margin: 10vh auto 32px; padding: 0 var(--gutter); }
+.session h1 { font-size: 1.3rem; font-weight: 750; letter-spacing: -0.01em; line-height: 1.3; }
+.session .card { padding: 24px 26px; }
 
 .foot {
   max-width: 1440px;

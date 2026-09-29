@@ -1,7 +1,8 @@
 """The command line: ``investigate`` prints each sample's trace, band, draft verdict and activity
 log through the same ``invoke`` the app uses; ``--as agent`` makes every call the agent's; replay
-serves only what was recorded; ``serve`` answers on 127.0.0.1 at the address it prints and stops
-cleanly on Ctrl-C; run as a program, it reads ``.env`` under the environment."""
+serves only what was recorded; ``serve`` answers on 127.0.0.1 at the address it prints, whose
+token makes the browser that opens it the person once and then prints the next address, and
+stops cleanly on Ctrl-C; run as a program, it reads ``.env`` under the environment."""
 
 import http.client
 import json
@@ -185,14 +186,31 @@ def test_a_missing_file_is_a_usage_error(capsys, tmp_path):
     assert "cannot read" in capsys.readouterr().err
 
 
-def get(port, path):
+def get(port, path, session=None):
+    """The status, the Set-Cookie header and the body of a GET, sent with ``session``'s
+    headers."""
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
-        conn.request("GET", path)
+        conn.request("GET", path, headers=session or {})
         response = conn.getresponse()
-        return response.status, response.read()
+        return response.status, response.getheader("Set-Cookie"), response.read()
     finally:
         conn.close()
+
+
+def signed_in(port, url):
+    """Opens ``url``, the address serve printed, as a browser and its page would: the headers
+    that then make a request the person's (the cookie it sets, the key its redirect hands on)."""
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    try:
+        conn.request("GET", url.removeprefix(f"http://127.0.0.1:{port}"))
+        response = conn.getresponse()
+        assert (response.status, response.read()) == (303, b"")
+        cookie = response.getheader("Set-Cookie").split(";", 1)[0]
+        key = response.getheader("Location").removeprefix("/#session=")
+    finally:
+        conn.close()
+    return {"Cookie": cookie, server.SESSION_HEADER: key}
 
 
 @pytest.mark.loopback
@@ -201,6 +219,7 @@ def test_serve_answers_at_the_address_it_prints_and_stops_cleanly(capsys, monkey
     web.mkdir()
     page = b"<!doctype html><title>Offer Checkpost</title>\n"
     (web / "index.html").write_bytes(page)
+    (web / "session.html").write_bytes(b"<!doctype html><title>Open the address</title>\n")
     monkeypatch.setattr(server, "WEB_DIR", web)
     started, ready, codes = [], threading.Event(), []
 
@@ -216,8 +235,11 @@ def test_serve_answers_at_the_address_it_prints_and_stops_cleanly(capsys, monkey
     serving.start()
     try:
         assert ready.wait(10)
-        port = started[0].port
-        answered = get(port, "/")
+        port, token = started[0].port, started[0].token
+        without = get(port, "/")
+        session = signed_in(port, f"http://127.0.0.1:{port}/?token={token}")
+        answered = get(port, "/", session)
+        following = started[0].url
     finally:
         if started:
             started[0].shutdown()
@@ -225,9 +247,24 @@ def test_serve_answers_at_the_address_it_prints_and_stops_cleanly(capsys, monkey
 
     assert not serving.is_alive()
     assert codes == [0]
-    assert answered == (200, page)
+    assert without[::2] == (200, b"<!doctype html><title>Open the address</title>\n")
+    assert answered[::2] == (200, page)
     out, err = capsys.readouterr()
-    assert (out, err) == (f"Offer Checkpost on http://127.0.0.1:{port} · provider fake\n", "")
+    assert (out, err) == (
+        f"Offer Checkpost on http://127.0.0.1:{port}/?token={token} · provider fake\n"
+        f"{cli.SESSION_LINE}\n"
+        f"{cli.OPENED_LINE.format(url=following)}\n",
+        "",
+    )
+    assert token not in following
+    assert cli.SESSION_LINE == (
+        "That address works once, and makes the browser that opens it the person; anything "
+        "else talking to this server is the agent."
+    )
+    assert cli.OPENED_LINE.format(url=following) == (
+        "The address was opened: that browser is the person. To make another browser the "
+        f"person instead, open {following}"
+    )
 
 
 @pytest.mark.loopback
@@ -256,10 +293,17 @@ def test_serve_from_python_dash_m_stops_on_ctrl_c_with_exit_code_0():
     try:
         line = serving.stdout.readline()
         match = re.fullmatch(
-            r"Offer Checkpost on http://127\.0\.0\.1:(\d+) · provider fake\n", line
+            r"Offer Checkpost on (http://127\.0\.0\.1:(\d+)/\?token=[A-Za-z0-9_-]{32}) · "
+            r"provider fake\n",
+            line,
         )
         assert match, line
-        status, body = get(int(match[1]), "/api/tools")
+        assert serving.stdout.readline() == f"{cli.SESSION_LINE}\n"
+        port = int(match[2])
+        status, _, body = get(port, "/api/tools")
+        session = signed_in(port, match[1])
+        calls = json.loads(get(port, "/api/calls", session)[2])
+        following = serving.stdout.readline()
         serving.send_signal(signal.SIGINT)
         out, err = serving.communicate(timeout=10)
     finally:
@@ -268,6 +312,11 @@ def test_serve_from_python_dash_m_stops_on_ctrl_c_with_exit_code_0():
             serving.communicate()
 
     assert status == 200 and json.loads(body)[0]["name"] == "open_case"
+    assert calls["caller"] == "human"
+    next_url = re.fullmatch(
+        r".* open (http://127\.0\.0\.1:\d+/\?token=[A-Za-z0-9_-]{32})\n", following
+    )
+    assert next_url and next_url[1] != match[1], following
     assert (serving.returncode, out, err) == (0, "", "")
 
 

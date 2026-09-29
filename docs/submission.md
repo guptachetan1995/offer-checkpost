@@ -48,45 +48,53 @@ and job seekers it protects, often freshers outside the big cities who get "shor
 WhatsApp or Telegram for jobs they never applied to, get the answer as a WhatsApp message or a
 shared page. Scam messages are sent in bulk, so one check answers a whole batch.
 
-THE INSIGHT: a scam offer is a set of claims about the public web: a company, a role, an
-office, a recruiter and a pay figure. A scammer can forge the message but not the search
-results about it. The employer's official domain is in Google's knowledge graph, and many large
-employers publish a notice on that domain saying they never charge candidates. A real opening
-is listed on Google Jobs, and a real office shows up on Google Maps. Many fake-job detectors
-train a text classifier on the wording of job posts, and a scammer can simply reword the
-message. Offer Checkpost checks what the message claims instead.
+WHAT'S DIFFERENT:
+- It is built for that intermediary. While the app runs, a forward that makes the same claims
+  as a message already checked (company, role, city, pay, fee and recruiter contacts) is
+  answered from that check at 0 searches.
+- The decisive evidence is the employer contradicting the message: when the message asks for
+  a fee, it searches the employer's official domain for the employer's own notice that it
+  charges candidates nothing.
+- Each search is chosen from what the earlier ones found. It stops once the evidence is
+  decisive and shows the searches it saved, and every search sends a json_restrictor.
+- On the page and the board, its best band reads "No contradictions found", never
+  "verified", "safe" or a score. A verdict posted for others is a person's click, frozen as a
+  snapshot of what they read.
+- The agent's tools and the person's verbs are separate lists, and the agent cannot act as
+  the person through its tools, the app's API or the MCP adapter.
 
-WHAT IT DOES: paste the message. Offer Checkpost extracts the checkable claims, shows where
-each one came from, and lets you confirm them. It reads Indian formats: ₹, K, LPA, lakh and
-+91 numbers. A planner then checks the claims against live SerpApi results and picks each next
-check from what the earlier searches found. When the knowledge graph names the employer's
-domain and the message asks for a fee, it searches that domain for the employer's own fraud
-notice. When the firm has no web footprint, it checks Maps for the office before looking for
-listings. When the recruiter writes from the official domain and asks no fee, it skips the
-fraud-notice search and looks for the listing first. It stops as soon as the evidence is
-decisive, and the trace shows why each search ran and how many it saved. Every finding is a
-named rule fired by a quoted, linked search result. The draft verdict is one of three bands:
-high risk, unverified, or consistent with a genuine offer. It never says "genuine" or "safe".
+WHAT IT DOES: paste the message. Offer Checkpost treats it as a set of claims about the public
+web (a company, a role, an office, a recruiter, a pay figure), since a scammer can forge the
+message but not the search results about it. It extracts the claims, shows where each one came
+from, and lets you confirm or correct them (an agent can too, and the page says which of you
+did); it reads ₹, K, LPA, lakh and +91 numbers. A planner then
+checks the claims against live SerpApi results: an unknown firm gets its office checked on
+Maps before its listings, and a recruiter on the official domain who asks no fee skips the
+fraud-notice search. Every finding is a named rule fired by a quoted, linked search result.
+The draft verdict is one of three bands: high risk, unverified, or "No contradictions found"
+(nothing found contradicts the offer). It never says "genuine" or "safe".
 
 WHAT YOU GET: a drafted verification reply to the recruiter, with one question per red flag;
 a pre-filled summary for the national cybercrime helpline 1930 / cybercrime.gov.in; and, for a
 placement officer, a verdict to publish on the Offer Board. The board is the officer's own
 log, and it reaches students as "Copy for WhatsApp" text or a downloaded page.
 
-HUMAN-ONLY BY DESIGN: "the agent" here is the automated investigator, or any MCP client; no
-LLM runs inside the app. The agent drafts. Only a person publishes or retracts a verdict, or
-spends searches after the evidence is already decisive. Those verbs are never registered as
-agent tools, and they refuse any caller but the human. The app never sends a message, files a
-report or contacts a recruiter. A false "scam" label can smear a real employer, and a false
-"genuine" costs a candidate money. Both are too costly to automate.
+HUMAN-ONLY BY DESIGN: "the agent" is the automated investigator, or an MCP client through the
+app's stdio adapter; no LLM runs inside the app. The agent drafts. Only a person publishes or
+retracts a verdict, records an outcome, or spends searches after the evidence is decisive, and
+the person is the browser that opened the single-use address the app prints; a request that
+claims to be the person is refused and logged. The app never sends a message, files a report
+or contacts a recruiter. A false "scam" label can smear a real employer, and a false "genuine" costs a
+candidate money. Both are too costly to automate.
 
 PRIVACY: the searches carry the claimed company, role and city and the official domain, plus a
 recruiter's domain or contact only when one is being checked. The candidate's own details are
 never sent. Everything else stays on the machine running it.
 
 Runs locally: Python, on SerpApi's official client. Judges can run it with their own SerpApi
-key, or keyless in replay mode on real SerpApi responses recorded during development and
-labelled with their date.
+key, or keyless with --provider fake on synthetic test data. Replay mode, keyless too, serves
+SerpApi responses recorded with a real key and dated; the demo samples' recordings are made
+before submission.
 
 ## How the project uses SerpApi (max 4,000 characters)
 
@@ -94,9 +102,9 @@ SerpApi is the product. Without search, Offer Checkpost can only read the messag
 its verdict can never rise above "unverified". Every conclusion it draws comes from a SerpApi
 result, and each engine proves a different claim.
 
-All calls go through SerpApi's official Python client (serpapi 1.1.2), with India parameters
-set per engine as each engine's documentation allows, and a json_restrictor so SerpApi returns
-only the fields the app reads:
+All searches go through SerpApi's official Python client (serpapi 1.1.2), with India
+parameters set per engine as each engine's documentation allows, and a json_restrictor so
+SerpApi returns only the fields the app reads:
 
 - Google Search, knowledge graph and organic results (gl=in, google_domain=google.co.in, an
   Indian-city location): reads knowledge_graph.website and organic_results[].link to find the
@@ -119,29 +127,39 @@ only the fields the app reads:
 - Account API (free): searches left this month, shown in the header and used by a quota guard
   that stops an investigation before the monthly reserve is touched.
 
-Two further checks run only when the evidence calls for them: Google Maps Reviews with its
-query filter reads reviews[].snippet at a found office when a fee was asked (never the
-reviewer's identity), and an exact-phrase Google search looks for a real recruiter phone or
-email next to scam reports.
+Two checks run only when the evidence calls for them: Google Maps Reviews with its query
+filter reads reviews[].snippet at a found office when a fee was asked or no listing matched
+(never the reviewer's identity), and an exact-phrase Google search looks for a real recruiter
+phone or email next to scam reports.
 
 Why it's used this way: the next search depends on what the earlier ones found. With no
 official domain there is no site: search and the office is checked first; with the sender on
 the official domain and no fee asked, the fraud-notice search is skipped; with no Maps place
-there is no reviews query. The planner stops when the evidence is decisive. In the demo, the
-impersonation sample is settled in 2 searches with 4 of its 6-search budget saved, the unknown
-firm also in 2, and the genuine offer takes 4. So the free plan covers at least 38 checks a
-month, and the same bulk-sent message forwarded again is answered at 0 searches. Results are
-cached locally. The trace shows every engine call, why it ran, and whether it came from the
-cache. Recorded responses, trimmed to the fields above and scrubbed of keys, account fields
-and personal data, power a keyless replay mode and the test fixtures.
+there is no reviews query. The planner stops when the evidence is decisive, and the trace
+shows every engine call, why it ran, whether it came from the cache, and the searches saved.
+On the test suite's synthetic fixtures, the impersonation sample stops at 2 of its 6 searches,
+the unknown firm also at 2, and the offer with nothing against it takes 4. With a 6-search cap and a 20-search
+reserve, the free plan's 250 searches cover at least 38 checks a month, and the same bulk-sent
+message forwarded again is answered at 0 searches. Live results are cached locally for 24
+hours. Responses recorded for keyless replay are trimmed to these fields, with keys, phone
+numbers, email addresses and people's profiles removed, before they are written.
+
+WHERE TO LOOK, by judging criterion (README sections and repository files):
+- Idea strength: the opening lines and "The problem".
+- Originality: "What's different here", each point with the file it lives in.
+- Technical complexity: src/offer_checkpost/planner.py (its docstring is the policy),
+  extract.py, invoke.py, server.py, mcp_server.py, and tests/ (./verify.sh runs them all).
+- Usefulness: "How it works" (step 4) and "What it can't check".
+- Meaningful SerpApi usage: "Where SerpApi comes in" and src/offer_checkpost/checks.py
+  (params and a reader per check).
 
 ## AI tools used (max 2,000 characters)
 
 Claude Code (Anthropic) did most of the hands-on work under my direction: researching the
-rules against the concept, planning, writing the code, tests and documentation, and scripting
-the Playwright screen recording of the demo. I set the constraints and reviewed the result.
-No AI model runs inside the app: every verdict comes from deterministic rules over SerpApi
-results.
+rules against the concept, planning, and writing the code, tests and documentation, including
+the Playwright tests that drive the app in Chrome. I set the constraints and reviewed the
+result. No AI model runs inside the app: every verdict comes from deterministic rules over
+SerpApi results.
 
 ## Additional team members
 

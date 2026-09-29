@@ -1,10 +1,15 @@
 """The real server on a loopback socket, spoken to with the standard library's http.client.
 
-Every change goes through ``POST /api/invoke`` and so through ``invoke``: a missing or forged
-actor, and each human-only verb called as the agent, come back refused and logged. The server
-binds 127.0.0.1 alone, and refuses, before ``invoke``, what a page of another site open in the
-same browser could send it: a foreign Host, Origin or Sec-Fetch-Site, and a POST that isn't
-``application/json``. It serves three names from ``web/`` and nothing else, and no answer
+Every change goes through ``POST /api/invoke`` and so through ``invoke``. Who is calling comes
+from the session: a request carrying both the cookie the token address sets and the key its
+redirect hands the page is the person's, and every other request is the agent's, whatever its
+body says; the cookie alone, which a browser also sends to every other port on 127.0.0.1, is
+the agent. The token address works once. A body naming anyone but the session's actor, and
+each human-only verb called as the agent, come back refused and logged. No token or session
+secret is in a body, the state or the log. The server binds 127.0.0.1 alone, and refuses,
+before ``invoke``, what a page of another site open in the same browser could send it: a
+foreign Host, Origin or Sec-Fetch-Site, and a POST that isn't ``application/json``. It serves
+three names and the page for a browser without the session, and nothing else, and no answer
 carries an exception's text or anything key-shaped."""
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ import pytest
 import requests
 
 from offer_checkpost import server as server_module
+from offer_checkpost.invoke import CLAIMED
 from offer_checkpost.providers import (
     FakeSearchProvider,
     ReplaySearchProvider,
@@ -29,7 +35,14 @@ from offer_checkpost.providers import (
     SerpApiSearchProvider,
     write_recording,
 )
-from offer_checkpost.server import CSP, MAX_BODY, MAX_DEPTH, make_server
+from offer_checkpost.server import (
+    CSP,
+    MAX_BODY,
+    MAX_DEPTH,
+    SESSION_COOKIE,
+    SESSION_HEADER,
+    make_server,
+)
 from offer_checkpost.store import Store
 from offer_checkpost.tools import TOOLS
 from offer_checkpost.verbs import VERBS
@@ -40,7 +53,7 @@ ENTRY = Path(__file__).resolve().parents[1]
 SAMPLES = ENTRY / "samples" / "offers"
 KEY_SHAPED = re.compile(r"[0-9a-fA-F]{64}")
 OUTSIDE = "a file outside web/"
-LIST = {"tool": "list_cases", "args": {}, "actor": "human"}
+LIST = {"tool": "list_cases", "args": {}}
 
 
 @dataclasses.dataclass
@@ -58,13 +71,17 @@ class Reply:
 
 
 class App:
-    """The server on a free port in a thread, and a client that keeps every reply."""
+    """The server on a free port in a thread, and a client that keeps every reply. A session
+    is opened at the start, as the token address opens one (``test_the_token_address_...``
+    checks that it does); ``person`` sends the current session's cookie and key, which make a
+    request the person's."""
 
-    def __init__(self, store: Store, web_dir: Path):
+    def __init__(self, store: Store, web_dir: Path, **kwargs):
         self.store = store
-        self.server = make_server(store, port=0, web_dir=web_dir)
+        self.server = make_server(store, port=0, web_dir=web_dir, **kwargs)
         self.port = self.server.port
         self.origin = f"http://127.0.0.1:{self.port}"
+        self.server.open_session(self.server.token)
         self.replies: list[Reply] = []
         # A short poll: shutdown() waits for the loop's next look, and every test stops one.
         self._thread = threading.Thread(
@@ -77,11 +94,24 @@ class App:
         self.server.server_close()
         self._thread.join(5)
 
-    def request(self, method, path, body=None, *, headers=None, timeout=10) -> Reply:
-        """``body`` is sent as JSON unless it is bytes. A header set to None is not sent."""
+    @property
+    def cookie(self) -> str:
+        """The current session's cookie, as a Cookie header carries it."""
+        return f"{self.server.cookie_name}={self.server.session.cookie}"
+
+    @property
+    def key(self) -> str:
+        return self.server.session.key
+
+    def request(self, method, path, body=None, *, headers=None, timeout=10, person=False) -> Reply:
+        """``body`` is sent as JSON unless it is bytes. A header set to None is not sent.
+        ``person`` sends the session's cookie and key."""
         sent = {"Host": f"127.0.0.1:{self.port}"}
         if body is not None:
             sent["Content-Type"] = "application/json"
+        if person:
+            sent["Cookie"] = self.cookie
+            sent[SESSION_HEADER] = self.key
         sent.update(headers or {})
         data = body if body is None or isinstance(body, bytes) else json.dumps(body).encode()
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
@@ -103,12 +133,13 @@ class App:
     def get(self, path, **kwargs) -> Reply:
         return self.request("GET", path, **kwargs)
 
-    def call(self, tool, args, actor="human", **kwargs) -> Reply:
-        body = {"tool": tool, "args": args, "actor": actor}
-        return self.request("POST", "/api/invoke", body, **kwargs)
+    def call(self, tool, args, *, person=True, **kwargs) -> Reply:
+        """One call, as the person unless ``person`` is False."""
+        body = {"tool": tool, "args": args}
+        return self.request("POST", "/api/invoke", body, person=person, **kwargs)
 
-    def ok(self, tool, args, actor="human"):
-        reply = self.call(tool, args, actor)
+    def ok(self, tool, args, *, person=True):
+        reply = self.call(tool, args, person=person)
         assert reply.status == 200
         envelope = reply.json()
         assert envelope["ok"], envelope
@@ -151,6 +182,7 @@ def web_dir(tmp_path):
     web = tmp_path / "web"
     web.mkdir()
     (web / "index.html").write_text("<!doctype html><title>Offer Checkpost</title>\n", "utf-8")
+    (web / "session.html").write_text("<!doctype html><title>Open the address</title>\n", "utf-8")
     (web / "app.js").write_text("document.title;\n", "utf-8")
     (web / "app.css").write_text("body { margin: 0; }\n", "utf-8")
     for name in ("pyproject.toml", "README.md", ".env"):
@@ -165,27 +197,7 @@ def app(web_dir):
     served.close()
 
 
-# ---- the actor is a request field, and invoke still decides ------------------------------
-
-
-def test_a_missing_or_forged_actor_reaches_invoke_and_is_refused_and_logged(app):
-    bodies = [{"tool": "list_cases", "args": {}}] + [
-        {**LIST, "actor": actor} for actor in ("admin", "", "Human", None)
-    ]
-    for body in bodies:
-        reply = app.request("POST", "/api/invoke", body)
-        assert reply.status == 200
-        envelope = reply.json()
-        assert (envelope["ok"], envelope["outcome"]) == (False, "refused")
-        assert envelope["error"].startswith("unknown actor: a call comes from 'human'")
-
-    assert [(e["actor"], e["tool"], e["result"]) for e in app.log()] == [
-        (None, "list_cases", "refused"),
-        ("admin", "list_cases", "refused"),
-        ("", "list_cases", "refused"),
-        ("Human", "list_cases", "refused"),
-        (None, "list_cases", "refused"),
-    ]
+# ---- the human-only verbs --------------------------------------------------------------
 
 
 VERB_ARGS = {
@@ -205,7 +217,7 @@ def test_each_human_only_verb_is_refused_for_the_agent_and_changes_nothing(app, 
     app.investigated("a")
     before = app.store.state()
 
-    reply = app.call(verb, VERB_ARGS[verb], "agent")
+    reply = app.call(verb, VERB_ARGS[verb], person=False)
 
     assert reply.status == 200
     envelope = reply.json()
@@ -228,6 +240,343 @@ def test_the_same_verbs_run_for_a_person(app):
     assert app.ok("retract_verdict", {"case_id": case_id, "reason": "wrong batch"})["by"] == (
         "human"
     )
+
+
+# ---- the session decides who is calling ------------------------------------------------------
+
+
+def test_every_token_and_secret_is_base64url_never_key_shaped_and_new(app, web_dir):
+    other = App(Store(FakeSearchProvider.from_fixtures()), web_dir)
+    other.close()
+
+    minted = [
+        secret
+        for served in (app, other)
+        for secret in (served.server.token, served.server.session.cookie, served.key)
+    ]
+    for secret in minted:
+        assert re.fullmatch(r"[A-Za-z0-9_-]{32}", secret), secret
+        assert not KEY_SHAPED.search(secret) and not re.fullmatch(r"[0-9a-f]+", secret)
+    assert len(set(minted)) == len(minted)
+    assert app.server.url == f"http://127.0.0.1:{app.port}/?token={app.server.token}"
+    assert app.server.cookie_name == f"{SESSION_COOKIE}_{app.port}"
+
+
+def test_the_token_address_opens_a_session_and_redirects_to_a_bare_address(app, web_dir):
+    opened = []
+    app.server.on_open = opened.append
+    token = app.server.token
+
+    reply = app.get(f"/?token={token}", headers={"Sec-Fetch-Site": "none"})
+
+    session = app.server.session
+    assert reply.status == 303
+    # The key rides in the fragment, which no request carries; the page takes it from there.
+    assert reply.headers["Location"] == f"/#session={session.key}"
+    assert reply.headers.get_all("Set-Cookie") == [
+        f"oc_session_{app.port}={session.cookie}; HttpOnly; SameSite=Strict; Path=/"
+    ]
+    assert reply.body == b""
+    assert token not in (session.cookie, session.key, app.server.token)
+    assert opened == [app.server.url]
+    cookie = reply.headers["Set-Cookie"].split(";", 1)[0]
+    page = app.get("/", headers={"Cookie": cookie})
+    assert (page.status, page.body) == (200, (web_dir / "index.html").read_bytes())
+    assert app.log() == []
+
+
+def test_the_token_address_works_once_and_the_next_one_signs_the_first_browser_out(app, web_dir):
+    used = app.server.token
+    first = app.get(f"/?token={used}")
+    cookie = first.headers["Set-Cookie"].split(";", 1)[0]
+    person = {"Cookie": cookie, SESSION_HEADER: first.headers["Location"].split("=", 1)[1]}
+    session_page = (web_dir / "session.html").read_bytes()
+
+    # As a second client, or anything reading the browser's history, would open it again.
+    again = app.get(f"/?token={used}")
+
+    assert (again.status, again.body) == (403, session_page)
+    assert again.headers.get_all("Set-Cookie") is None
+    assert app.get("/api/calls", headers=person).json()["caller"] == "human"
+
+    following = app.get(f"/?token={app.server.token}")
+
+    assert following.status == 303
+    assert app.get("/api/calls", headers=person).json()["caller"] == "agent"
+    assert app.get("/", headers={"Cookie": cookie}).body == session_page
+    assert app.log() == []
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "token=",
+        "token",
+        "token=stale",
+        "token={token}x",
+        "token={short}",
+        "token={swapped}",
+        "token={token}&token={token}",
+        "token=%C3%A9{token}",
+        "token=+{token}",
+    ],
+)
+def test_any_other_token_gets_the_session_page_with_403_and_no_cookie(app, web_dir, query):
+    token, session = app.server.token, app.server.session
+    query = query.format(token=token, short=token[:-1], swapped=token.swapcase())
+
+    reply = app.get(f"/?{query}")
+
+    assert (reply.status, reply.headers["Content-Type"]) == (403, "text/html; charset=utf-8")
+    assert reply.body == (web_dir / "session.html").read_bytes()
+    assert reply.headers.get_all("Set-Cookie") is None
+    assert (app.server.token, app.server.session) == (token, session)
+    assert app.log() == []
+
+
+@pytest.mark.parametrize(
+    ("cookie", "key"),
+    [
+        (None, None),
+        # What a program listening on another port of 127.0.0.1 gets when the browser visits it.
+        ("{name}={cookie}", None),
+        (None, "{key}"),
+        ("{name}=forged", "{key}"),
+        ("{name}=", "{key}"),
+        ("{name}={cookie}x", "{key}"),
+        ('{name}="{cookie}"', "{key}"),
+        ("{name}={stale}", "{key}"),
+        ("{name}={token}", "{key}"),
+        ("{name}={key}", "{key}"),
+        ("{name}={cookie}", "{cookie}"),
+        ("{name}={cookie}", "{key}x"),
+        ("{name}={cookie}", "{stale_key}"),
+        ("{name}={cookie}", ""),
+        ("oc_session={cookie}", "{key}"),
+        ("oc_session_1={cookie}", "{key}"),
+        ("{name}_x={cookie}", "{key}"),
+        ("{cookie}", "{key}"),
+    ],
+    ids=[
+        "neither",
+        "cookie-alone",
+        "key-alone",
+        "forged",
+        "empty",
+        "longer",
+        "quoted",
+        "stale",
+        "token-as-cookie",
+        "key-as-cookie",
+        "cookie-as-key",
+        "longer-key",
+        "stale-key",
+        "empty-key",
+        "portless-name",
+        "other-port",
+        "prefix",
+        "bare",
+    ],
+)
+def test_without_both_halves_of_the_session_a_call_is_the_agents(app, web_dir, cookie, key):
+    # "stale": the session of a server that has stopped, as after a restart.
+    stale = App(Store(FakeSearchProvider.from_fixtures()), web_dir)
+    stale.close()
+    case_id = app.investigated("a")
+    app.ok("draft_verdict", {"case_id": case_id})
+    revision = app.ok("get_case", {"case_id": case_id})["revision"]
+    values = {
+        "name": app.server.cookie_name,
+        "cookie": app.server.session.cookie,
+        "key": app.key,
+        "token": app.server.token,
+        "stale": stale.server.session.cookie,
+        "stale_key": stale.key,
+    }
+    headers = {
+        "Cookie": cookie and cookie.format(**values),
+        SESSION_HEADER: key and key.format(**values),
+    }
+
+    calls = app.get("/api/calls", headers=headers).json()
+    publish = app.call(
+        "publish_verdict",
+        {"case_id": case_id, "label": "likely_impersonation", "note": "", "revision": revision},
+        person=False,
+        headers=headers,
+    ).json()
+
+    assert calls["caller"] == "agent"
+    assert publish["outcome"] == "refused"
+    assert publish["error"].startswith("publish_verdict is human-only")
+    last = app.log()[-1]
+    assert (last["actor"], last["tool"], last["result"]) == ("agent", "publish_verdict", "refused")
+    assert app.store.board == []
+
+
+def test_the_cookie_alone_opens_the_page_but_its_calls_are_the_agents(app, web_dir):
+    """A navigation can't carry the key, so the cookie picks the page; a program on another
+    port that the browser visited has the cookie and still can't act as the person."""
+    page = app.get("/", headers={"Cookie": app.cookie})
+    outcome = {"case_id": "case_001", "outcome": "walked_away"}
+    envelope = app.call("record_outcome", outcome, person=False, headers={"Cookie": app.cookie})
+
+    assert (page.status, page.body) == (200, (web_dir / "index.html").read_bytes())
+    assert envelope.json()["error"].startswith("record_outcome is human-only")
+    assert app.get("/", headers={SESSION_HEADER: app.key}).body == (
+        (web_dir / "session.html").read_bytes()
+    )
+
+
+def test_the_session_among_other_cookies_is_the_person(app, web_dir):
+    headers = {"Cookie": f"theme=dark; {app.cookie}; lang=en", SESSION_HEADER: app.key}
+
+    assert app.get("/", headers=headers).body == (web_dir / "index.html").read_bytes()
+    assert app.get("/api/calls", headers=headers).json()["caller"] == "human"
+
+
+def test_two_session_keys_are_the_agent(app):
+    head, body = app.raw(
+        f"GET /api/calls HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nCookie: {app.cookie}\r\n"
+        f"{SESSION_HEADER}: {app.key}\r\n{SESSION_HEADER}: {app.key}\r\n"
+        "Connection: close\r\n\r\n".encode()
+    )
+    assert head.startswith("HTTP/1.0 200 ") and json.loads(body)["caller"] == "agent"
+
+
+def test_a_request_without_the_session_cannot_claim_to_be_the_person(app):
+    case_id = app.investigated("a")
+    app.ok("draft_verdict", {"case_id": case_id})
+    revision = app.ok("get_case", {"case_id": case_id})["revision"]
+    args = {"case_id": case_id, "label": "likely_impersonation", "note": "", "revision": revision}
+    before = app.store.state()
+
+    reply = app.request(
+        "POST", "/api/invoke", {"tool": "publish_verdict", "args": args, "actor": "human"}
+    )
+
+    assert reply.status == 200
+    assert reply.json() == {"ok": False, "outcome": "refused", "error": CLAIMED}
+    assert CLAIMED.startswith("who is calling comes from the session, not from the request")
+    assert "a request cannot claim to be the person" in CLAIMED
+    after = app.store.state()
+    assert after["board"] == [] and after["cases"] == before["cases"]
+    last = after["activityLog"][-1]
+    assert (last["actor"], last["tool"], last["result"], last["reason"]) == (
+        "agent",
+        "publish_verdict",
+        "refused",
+        CLAIMED,
+    )
+
+
+def test_without_the_session_an_agent_tool_runs_as_the_agent(app):
+    text = (SAMPLES / "a.txt").read_text("utf-8")
+
+    reply = app.request("POST", "/api/invoke", {"tool": "open_case", "args": {"text": text}})
+
+    assert reply.json()["ok"] is True
+    [entry] = app.log()
+    assert (entry["actor"], entry["tool"], entry["result"]) == ("agent", "open_case", "ok")
+    assert app.store.cases["case_001"]["trace"] == []
+
+
+@pytest.mark.parametrize(
+    ("person", "actor", "logged", "outcome"),
+    [
+        (True, "human", "human", "ok"),
+        (True, "agent", "human", "refused"),
+        (False, "agent", "agent", "ok"),
+        (False, "human", "agent", "refused"),
+        (False, "admin", "agent", "refused"),
+        (False, "", "agent", "refused"),
+        (False, "Human", "agent", "refused"),
+        (False, None, "agent", "refused"),
+        (False, ["human"], "agent", "refused"),
+        (True, None, "human", "refused"),
+    ],
+)
+def test_an_actor_in_the_body_is_ignored_when_it_is_the_sessions_and_refused_otherwise(
+    app, person, actor, logged, outcome
+):
+    body = {**LIST, "actor": actor}
+
+    envelope = app.request("POST", "/api/invoke", body, person=person).json()
+
+    assert envelope.get("outcome", "ok") == outcome
+    if outcome == "refused":
+        assert envelope["error"] == CLAIMED
+    [entry] = app.log()
+    assert (entry["actor"], entry["tool"], entry["result"]) == (logged, "list_cases", outcome)
+
+
+def test_the_call_log_counts_the_activity_and_says_who_is_asking(app):
+    assert app.get("/api/calls").json() | {"calls": None} == {
+        "server": app.store.server,
+        "calls": None,
+        "activity": 0,
+        "caller": "agent",
+    }
+    app.investigated("a")
+    app.call("publish_verdict", VERB_ARGS["publish_verdict"], person=False)
+
+    as_agent = app.get("/api/calls").json()
+    as_person = app.get("/api/calls", person=True).json()
+
+    assert (as_agent["activity"], as_agent["caller"]) == (6, "agent")
+    assert (as_person["activity"], as_person["caller"]) == (6, "human")
+
+
+def test_no_token_or_session_secret_is_in_a_body_the_state_or_the_log(app):
+    first = app.server.token
+    app.get(f"/?token={first}")
+    app.get(f"/?token={first}")
+    app.get(f"/?token={app.server.token}x")
+    app.get("/")
+    app.get("/", person=True)
+    case_id = app.investigated("a")
+    post = app.publish(case_id, "likely_impersonation", "Checked.")
+    app.call("retract_verdict", {"case_id": case_id, "reason": "wrong batch"}, person=False)
+    for path in ("/api/state", "/api/calls", "/api/tools", "/api/samples", "/api/board.html"):
+        app.get(path, person=True)
+        app.get(path)
+
+    session = app.server.session
+    secrets_ = (first, app.server.token, session.cookie, session.key)
+    for reply in app.replies:
+        assert not [s for s in secrets_ if s in reply.text]
+    headers = [
+        (n, v) for r in app.replies for n, v in r.headers.items() if any(s in v for s in secrets_)
+    ]
+    assert headers == [
+        ("Location", f"/#session={session.key}"),
+        (
+            "Set-Cookie",
+            f"oc_session_{app.port}={session.cookie}; HttpOnly; SameSite=Strict; Path=/",
+        ),
+    ]
+    assert post["by"] == "human"
+    assert not [s for s in secrets_ if s in json.dumps(app.store.state())]
+
+
+def test_with_the_session_the_person_publishes(app):
+    case_id = app.investigated("a")
+
+    post = app.publish(case_id, "likely_impersonation", "Do not pay the fee.")
+
+    assert (post["caseId"], post["by"]) == (case_id, "human")
+    last = app.log()[-1]
+    assert (last["actor"], last["tool"], last["result"]) == ("human", "publish_verdict", "ok")
+
+
+def test_the_real_session_page_says_where_the_address_is_and_runs_nothing():
+    page = (ENTRY / "web" / "session.html").read_text("utf-8")
+
+    assert "<script" not in page.lower() and " on" + "click" not in page.lower()
+    assert '<link rel="stylesheet" href="/app.css">' in page
+    assert "printed in the terminal where Offer Checkpost was started" in page
+    assert "acts as the agent" in page
+    assert "Each address works once" in page
 
 
 # ---- loopback only --------------------------------------------------------------------------
@@ -285,7 +634,12 @@ def test_the_call_log_answers_while_the_store_is_locked(app):
 
     assert calls.status == 200
     state = app.store.state()
-    assert calls.json() == {"server": state["server"], "calls": state["calls"]}
+    assert calls.json() == {
+        "server": state["server"],
+        "calls": state["calls"],
+        "activity": len(state["activityLog"]),
+        "caller": "agent",
+    }
 
 
 class Held(SearchProvider):
@@ -364,7 +718,9 @@ def test_an_agent_cannot_rewrite_a_published_post_or_the_board_download(app):
         ("investigate", {}),
         ("lookup_official_site", {}),
     ]
-    replies = [app.call(tool, {"case_id": case_id, **args}, "agent") for tool, args in attempts]
+    replies = [
+        app.call(tool, {"case_id": case_id, **args}, person=False) for tool, args in attempts
+    ]
 
     for reply in replies:
         assert reply.json()["outcome"] == "refused"
@@ -486,8 +842,9 @@ def test_a_foreign_or_missing_host_is_forbidden_on_every_request(app, host):
     assert app.log() == []
 
 
-def test_localhost_with_the_port_is_this_server(app):
-    assert app.get("/", headers={"Host": f"localhost:{app.port}"}).status == 200
+def test_localhost_with_the_port_is_this_server(app, web_dir):
+    reply = app.get("/", headers={"Host": f"localhost:{app.port}"}, person=True)
+    assert (reply.status, reply.body) == (200, (web_dir / "index.html").read_bytes())
 
 
 def test_two_host_headers_are_forbidden(app):
@@ -665,6 +1022,7 @@ def test_a_call_nested_as_deep_as_allowed_is_refused_by_invoke_and_the_state_sti
     reply = app.request("POST", "/api/invoke", body)
 
     assert (reply.status, reply.json()["outcome"]) == (200, "refused")
+    assert reply.json()["error"] == CLAIMED
     assert app.get("/api/state").status == 200
 
 
@@ -752,13 +1110,14 @@ def test_a_content_length_that_is_not_a_number_is_400(app):
 
 
 def test_the_page_and_its_two_files_are_served_from_web(app, web_dir):
-    for path, name, kind in [
-        ("/", "index.html", "text/html; charset=utf-8"),
-        ("/?sample=a", "index.html", "text/html; charset=utf-8"),
-        ("/app.js", "app.js", "text/javascript; charset=utf-8"),
-        ("/app.css", "app.css", "text/css; charset=utf-8"),
+    for path, name, kind, person in [
+        ("/", "index.html", "text/html; charset=utf-8", True),
+        ("/?sample=a", "index.html", "text/html; charset=utf-8", True),
+        ("/", "session.html", "text/html; charset=utf-8", False),
+        ("/app.js", "app.js", "text/javascript; charset=utf-8", False),
+        ("/app.css", "app.css", "text/css; charset=utf-8", False),
     ]:
-        reply = app.get(path)
+        reply = app.get(path, person=person)
         assert (reply.status, reply.headers["Content-Type"]) == (200, kind)
         assert reply.body == (web_dir / name).read_bytes()
 
@@ -781,6 +1140,7 @@ def test_a_missing_page_file_is_404(app, web_dir):
         "/.env",
         "/../.env",
         "/index.html",
+        "/session.html",
         "/web/app.js",
         "/web/",
         "/APP.JS",
@@ -803,6 +1163,9 @@ def test_every_answer_carries_the_security_headers_and_no_cors_grant(app, monkey
         "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     )
     app.get("/")
+    app.get("/", person=True)
+    app.get(f"/?token={app.server.token}")
+    app.get("/?token=stale")
     app.get("/app.js")
     app.get("/api/state")
     app.get("/api/calls")
@@ -815,7 +1178,7 @@ def test_every_answer_carries_the_security_headers_and_no_cors_grant(app, monkey
     app.request("POST", "/api/invoke", b"x" * (MAX_BODY + 1))
     monkeypatch.setattr(app.store, "state", lambda: 1 / 0)
     app.get("/api/state")
-    assert sorted({r.status for r in app.replies}) == [200, 400, 403, 404, 405, 413, 500]
+    assert sorted({r.status for r in app.replies}) == [200, 303, 400, 403, 404, 405, 413, 500]
 
     for reply in app.replies:
         assert reply.headers["Content-Security-Policy"] == CSP

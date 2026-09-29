@@ -202,16 +202,27 @@ class Store:
         )
 
     def log(
-        self, actor: Any, tool: Any, args: Any, result: str, reason: str | None = None
+        self,
+        actor: Any,
+        tool: Any,
+        args: Any,
+        result: str,
+        reason: str | None = None,
+        *,
+        planner: bool = False,
     ) -> dict[str, Any]:
         """Appends an activity-log entry and returns it, so a call logged as it starts can be
-        ``settle``d when it ends and still sit before the calls it made."""
+        ``settle``d when it ends and still sit before the calls it made. A check the planner
+        made inside another call is marked ``planner``: it was asked for by whoever made that
+        call, so the page tells the agent's own calls from the checks a person's click ran."""
         entry = {
             "ts": self.now(),
             "actor": redact(actor),
             "tool": redact(tool),
             "args": redact(args),
         }
+        if planner:
+            entry["planner"] = True
         self.settle(entry, result, reason)
         self.activity_log.append(entry)
         return entry

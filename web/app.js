@@ -1,22 +1,39 @@
 /* Offer Checkpost, the page.
 
-Every change a person makes here is one POST /api/invoke with actor "human": the same invoke
-path the planner, the command line and an MCP client use. After each call the page reads
-GET /api/state again and redraws from it, so the screen always shows the server's state and
-never the page's own guess. The page has no other way to change anything, and it never calls
-a human-only verb as the agent.
+Every change a person makes here is one POST /api/invoke: the same invoke path the planner,
+the command line and an MCP client use. The page never says who it is. The server counts a
+call as the person's only when it carries both halves of the session that opening the address
+printed in the terminal made: the cookie the browser sends, and the key this page sends in a
+header. The key arrives once, in the address's fragment, and is kept in this tab's
+sessionStorage, which only this origin can read; every call without it is the agent's. After
+each call the page reads GET /api/state again and redraws from it, so the screen always shows
+the server's state and never the page's own guess. The page has no other way to change
+anything.
 
 An investigation is one POST that can take seconds of live searching, so while any POST is in
 flight the page polls GET /api/calls, which answers without waiting for the investigation, and
-the call-log strip grows as each search runs.
+the call-log strip grows as each search runs. When idle it polls the same read more slowly: a
+change in the activity log it didn't make is read and drawn, and the agent's calls among it are
+said once beside the log. A redraw keeps what the person is in the middle of: the
+text they typed, the caret, open disclosures and scroll positions. And when the server stops
+counting the page as the person (the app restarted, or the address was opened elsewhere), the
+page says so and turns off what only a person can do.
+
+A person publishes a case as they read it. The page keeps the revision of each case as the
+person last read it, and only the person's own calls move it on: a revision the agent moved
+clears the chosen label and says what the agent called, and the publish click sends the
+revision the person read, so the server refuses a case that changed after it.
 
 Pasted messages and search results are outside input: everything from the server is rendered
 with textContent and createElement, never parsed as HTML, and a link is a link only when it is
 http or https.
 */
 
-const ACTOR = 'human';
 const POLL_MS = 500;
+const WATCH_MS = 2000;
+const NOT_ANSWERING = 'The app is not answering. Start it again, then reload this page.';
+const SIGNED_OUT = 'This page is not signed in as the person: open the newest address printed in the terminal.';
+const SESSION_HEADER = 'X-Offer-Session';
 
 const BANDS = {
   high_risk: { cls: 'red', title: 'High risk', short: 'High risk' },
@@ -108,6 +125,17 @@ const EDITABLE = {
   fee: { label: 'Fee asked (rupees)', rupees: 'amountInr', example: '2499' },
 };
 const HUMAN_VERBS = ['publish_verdict', 'retract_verdict', 'record_outcome', 'run_remaining_checks'];
+// The agent's tools that never move a case's revision: a read, or a draft written from the case
+// as it stands.
+const KEEPS_REVISION = new Set([
+  'open_case',
+  'get_case',
+  'list_cases',
+  'search_budget',
+  'draft_verdict',
+  'draft_recruiter_reply',
+  'draft_cybercrime_report',
+]);
 
 let state = null;
 let samples = [];
@@ -117,7 +145,8 @@ const ui = {
   busy: null,
   errors: new Map(),
   edits: new Map(),
-  fixOpen: new Set(),
+  // The <details> the person opened, by key, so a redraw leaves them open.
+  open: new Set(),
   publish: new Map(),
   retracting: null,
   retractReason: '',
@@ -127,6 +156,12 @@ const ui = {
   revealFocus: false,
   seenRows: new Set(),
   primed: false,
+  // True once the server no longer counts this page as the person.
+  signedOut: false,
+  // Each case's revision as the person last read it, and for a case the agent changed since,
+  // the tools it called.
+  read: new Map(),
+  changed: new Map(),
 };
 
 // ---- small helpers ------------------------------------------------------------------------
@@ -238,8 +273,35 @@ function httpWords(status, body) {
   return `The app answered HTTP ${status}${said}.`;
 }
 
+/** The session's key, from the address's fragment the first time (taken out of the address
+ * bar at once) and from this tab's sessionStorage after a reload; empty when this tab was never
+ * given it, and then every call is the agent's. */
+function takeSessionKey() {
+  const handed = /^#session=([A-Za-z0-9_-]+)$/.exec(location.hash);
+  if (handed) {
+    history.replaceState(null, '', location.pathname);
+    try {
+      sessionStorage.setItem('session', handed[1]);
+    } catch {
+      // Storage turned off: the key lasts until this page is reloaded.
+    }
+    return handed[1];
+  }
+  try {
+    return sessionStorage.getItem('session') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+const sessionKey = takeSessionKey();
+
+function headers(more) {
+  return { Accept: 'application/json', ...more, ...(sessionKey ? { [SESSION_HEADER]: sessionKey } : {}) };
+}
+
 async function getJSON(path) {
-  const res = await fetch(path, { cache: 'no-store', headers: { Accept: 'application/json' } });
+  const res = await fetch(path, { cache: 'no-store', headers: headers() });
   if (!res.ok) throw new Error(httpWords(res.status));
   return res.json();
 }
@@ -256,14 +318,19 @@ function wellFormed(value) {
   return value;
 }
 
+// POSTs sent so far: a change to the activity log that overlaps one of them is the page's own.
+let sent = 0;
+
 async function post(tool, args) {
+  sent += 1;
   let res;
   try {
     res = await fetch('/api/invoke', {
       method: 'POST',
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(wellFormed({ tool, args, actor: ACTOR })),
+      headers: headers({ 'Content-Type': 'application/json' }),
+      // No actor: the session the page and the browser hold decides who is calling.
+      body: JSON.stringify(wellFormed({ tool, args })),
     });
   } catch {
     return { ok: false, outcome: 'error', error: 'The app did not answer. Is it still running?' };
@@ -288,6 +355,7 @@ async function pollCalls() {
   try {
     const data = await getJSON('/api/calls');
     renderStrip(data.server, data.calls || [], false);
+    signedIn(data.caller === 'human');
     if (ui.progress) {
       ui.progress.now = (data.calls || []).length;
       const line = $('progress');
@@ -311,8 +379,8 @@ function words(out) {
   return /\brefused\b/.test(said) ? cap(said) : `Refused: ${said}`;
 }
 
-/** One POST through invoke as "human", polling the call log while it runs, then a fresh read
- * of the state. `onOk` runs before the redraw, so it can pick what the redraw shows. */
+/** One POST through invoke, polling the call log while it runs, then a fresh read of the
+ * state. `onOk` runs before the redraw, so it can pick what the redraw shows. */
 async function call(tool, args, slotName, onOk) {
   ui.errors.delete(slotName);
   inflight += 1;
@@ -348,19 +416,53 @@ async function act(busy, work) {
   }
 }
 
+// How many activity-log entries the page has taken in; null before the first read.
+let seenActivity = null;
+
 async function refresh() {
+  let fresh;
   try {
-    state = await getJSON('/api/state');
+    fresh = await getJSON('/api/state');
     notice(null);
   } catch {
-    notice('The app is not answering. Start it again, then reload this page.');
+    notice(NOT_ANSWERING);
     return;
   }
+  const log = fresh.activityLog;
+  // A read that left before another came back can be behind it; the log only ever grows.
+  if (seenActivity !== null && log.length < seenActivity) return;
+  const added = seenActivity === null ? [] : log.slice(seenActivity);
+  state = fresh;
+  seenActivity = log.length;
   if (ui.current && !state.cases.some((c) => c.id === ui.current)) {
     ui.current = null;
     ui.composing = true;
   }
+  absorb(added);
   render();
+}
+
+/** Takes in the activity-log entries a fresh read added, whoever's call it followed. Says which
+ * calls the agent made (the planner's checks inside a call are part of that call), and follows
+ * each case the person has read: a revision their own calls moved is still read, and one the
+ * agent moved is not. */
+function absorb(entries) {
+  const agent = entries.filter((e) => e.actor === 'agent' && !e.planner);
+  noteAgent(agent);
+  for (const c of state.cases) {
+    if (!ui.read.has(c.id) || ui.read.get(c.id) === c.revision) continue;
+    const onCase = agent.filter((e) => e.result === 'ok' && e.args?.case_id === c.id);
+    if (!onCase.some((e) => !KEEPS_REVISION.has(e.tool))) {
+      ui.read.set(c.id, c.revision);
+      continue;
+    }
+    const names = ui.changed.get(c.id) ?? new Set();
+    for (const e of onCase) names.add(e.tool);
+    ui.changed.set(c.id, names);
+    // A label chosen for the case as it was is not a choice for the case as it is.
+    const choice = ui.publish.get(c.id);
+    if (choice) Object.assign(choice, { label: '', picked: false });
+  }
 }
 
 async function refreshBudget() {
@@ -373,6 +475,58 @@ function notice(text) {
   const el = $('notice');
   el.hidden = !text;
   el.textContent = text || '';
+}
+
+let watching = false;
+let composing = false;
+
+/** The idle poll: reads the call log and the activity count, and when the activity log grew
+ * without the page, reads the state and redraws. It stands aside while the person's own call
+ * runs (that call reads the state when it ends) and while they compose text with an input
+ * method, which a redraw would cut short. */
+async function watch() {
+  if (watching || inflight || ui.busy || composing) return;
+  watching = true;
+  const before = sent;
+  try {
+    const data = await getJSON('/api/calls');
+    notice(null);
+    renderStrip(data.server, data.calls || [], false);
+    signedIn(data.caller === 'human');
+    if (data.activity !== seenActivity && sent === before) await refresh();
+  } catch {
+    notice(NOT_ANSWERING);
+  } finally {
+    watching = false;
+  }
+}
+
+const agentNote = h('p', { class: 'agent-note', id: 'agent-note', hidden: true });
+let agentNoteTimer = 0;
+
+/** Says, beside the activity log, which calls the agent made: `entries` are its own. */
+function noteAgent(entries) {
+  const names = [...new Set(entries.map((e) => `${e.tool}${e.result === 'refused' ? ' (refused)' : ''}`))];
+  if (!names.length) return;
+  const shown = names.length > 4 ? [...names.slice(0, 3), `${names.length - 3} more`] : names;
+  agentNote.textContent = `The agent called ${listed(shown)}.`;
+  agentNote.hidden = false;
+  announce(agentNote.textContent);
+  clearTimeout(agentNoteTimer);
+  agentNoteTimer = setTimeout(() => {
+    agentNote.hidden = true;
+  }, 8000);
+}
+
+/** Shows or clears the banner for a page the server no longer counts as the person, and turns
+ * the human-only controls off or back on. */
+function signedIn(yes) {
+  if (ui.signedOut === !yes) return;
+  ui.signedOut = !yes;
+  const banner = $('session-lost');
+  banner.hidden = yes;
+  banner.textContent = yes ? '' : SIGNED_OUT;
+  render();
 }
 
 // ---- actions ------------------------------------------------------------------------------
@@ -529,8 +683,8 @@ function publish(c) {
     return;
   }
   act('publish', async () => {
-    // The revision the page shows: the server refuses the click if the case changed since.
-    const args = { case_id: c.id, label: choice.label, note: choice.note, revision: c.revision };
+    // The revision the person read: the server refuses the click if the case changed since.
+    const args = { case_id: c.id, label: choice.label, note: choice.note, revision: ui.read.get(c.id) };
     const out = await call('publish_verdict', args, 'publish', () => {
       ui.publish.delete(c.id);
       ui.focusKey = `wa-${c.id}`;
@@ -597,6 +751,11 @@ async function copyText(text, button) {
 
 function confirmed(c) {
   return CLAIM_FIELDS.every((field) => !c.claims[field] || c.claims[field].confirmed);
+}
+
+/** True when a person, not the agent, confirmed every claim the case has. */
+function confirmedByPerson(c) {
+  return CLAIM_FIELDS.every((field) => !c.claims[field] || c.claims[field].confirmedBy === 'human');
 }
 
 /** The latest investigation's lines, from its step 0 on, and the lines before them. */
@@ -776,6 +935,19 @@ function safeLink(url) {
     'a',
     { href: url, target: '_blank', rel: 'noopener noreferrer nofollow', class: 'src' },
     url.replace(/^https?:\/\//i, ''),
+  );
+}
+
+/** A <details> that stays open or closed across redraws, as the person left it. */
+function disclosure(key, props, ...kids) {
+  return h(
+    'details',
+    {
+      ...props,
+      open: ui.open.has(key),
+      ontoggle: (e) => (e.target.open ? ui.open.add(key) : ui.open.delete(key)),
+    },
+    ...kids,
   );
 }
 
@@ -1053,7 +1225,8 @@ function claimChips(c) {
   const out = [];
   const marks = (x) => [
     x.corrected ? { text: 'corrected', cls: 'corrected' } : null,
-    x.confirmed ? { text: '✓ confirmed', cls: 'ok' } : null,
+    x.confirmed && x.confirmedBy === 'human' ? { text: '✓ confirmed', cls: 'ok' } : null,
+    x.confirmed && x.confirmedBy !== 'human' ? { text: 'confirmed by the agent', cls: 'note' } : null,
   ];
   for (const field of ['company', 'role', 'city']) {
     if (cl[field]) out.push(chip(field, field, cl[field].value, marks(cl[field])));
@@ -1103,13 +1276,9 @@ function corrections(c) {
       }),
     );
   });
-  return h(
-    'details',
-    {
-      class: 'fix',
-      open: ui.fixOpen.has(c.id),
-      ontoggle: (e) => (e.target.open ? ui.fixOpen.add(c.id) : ui.fixOpen.delete(c.id)),
-    },
+  return disclosure(
+    `fix:${c.id}`,
+    { class: 'fix' },
     h('summary', {}, 'Correct a claim: company, role, city, pay or fee'),
     h(
       'div',
@@ -1135,6 +1304,7 @@ const ON_BOARD_HINT = 'Its verdict is on the Offer Board, so the case stays as p
 
 function cardClaims(c) {
   const ok = confirmed(c);
+  const byPerson = ok && confirmedByPerson(c);
   return h(
     'section',
     { class: 'card claims', 'aria-labelledby': 'claims-h' },
@@ -1142,18 +1312,24 @@ function cardClaims(c) {
       'div',
       { class: 'card-head' },
       h('h2', { id: 'claims-h' }, 'Claims in the message'),
-      h('span', { class: ['state', ok && 'ok'] }, ok ? 'Confirmed' : 'Not confirmed yet'),
+      h(
+        'span',
+        { class: ['state', byPerson && 'ok'] },
+        byPerson ? 'Confirmed' : ok ? 'Confirmed by the agent' : 'Not confirmed yet',
+      ),
     ),
     h(
       'p',
       { class: 'sub' },
-      ok
+      byPerson
         ? 'A person checked these against the message. Correcting one makes it unconfirmed again.'
-        : 'Check each claim against the highlighted text, correct any that are wrong, then confirm. Nothing is searched before you do.',
+        : ok
+          ? 'The agent confirmed the claims marked so, not a person. Check them against the highlighted text before you rely on them, then confirm them yourself.'
+          : 'Check each claim against the highlighted text, correct any that are wrong, then confirm. Nothing is searched until the claims are confirmed.',
     ),
     h('ul', { class: 'chips' }, claimChips(c)),
     onBoard(c) ? h('p', { class: 'fine frozen' }, ON_BOARD_HINT) : corrections(c),
-    ok || onBoard(c)
+    byPerson || onBoard(c)
       ? null
       : h(
           'div',
@@ -1187,7 +1363,11 @@ function cardMessage(c) {
       h('mark', { class: 'flag' }, 'Underlined'),
       ': what a text rule flagged.',
     ),
-    h('pre', { class: 'message', id: 'message', tabindex: '0', 'aria-label': 'The message as pasted' }, highlighted(c)),
+    h(
+      'pre',
+      { class: 'message', id: 'message', tabindex: '0', 'aria-label': 'The message as pasted', 'data-scroll': `message:${c.id}` },
+      highlighted(c),
+    ),
   );
 }
 
@@ -1269,7 +1449,7 @@ function cardInvestigation(c) {
   const hint = onBoard(c)
     ? ON_BOARD_HINT
     : !ok
-    ? 'Confirm the claims first: nothing is searched until a person has checked them.'
+    ? 'Confirm the claims first: nothing is searched until they are confirmed.'
     : ran
       ? 'Investigating again starts afresh, with a fresh budget; earlier findings are set aside.'
       : `Searches only what earlier results make worthwhile: at most ${plural(c.budget?.maxSearches ?? 6, 'search')} for this case.`;
@@ -1406,8 +1586,8 @@ function cardTrace(c) {
     ),
     h('ol', { class: 'trace' }, lines.map((line, i) => traceRow(c, line, sig, i, ui.primed))),
     earlier.length
-      ? h(
-          'details',
+      ? disclosure(
+          `earlier:${c.id}`,
           { class: 'earlier' },
           h('summary', {}, `${plural(earlier.length, 'line')} from an earlier investigation, set aside`),
           h('ol', { class: 'trace' }, earlier.map((line, i) => traceRow(c, line, sig, i, false))),
@@ -1437,7 +1617,7 @@ function cardRemaining(c) {
           type: 'button',
           class: 'btn',
           'data-focus': 'remaining',
-          disabled: onBoard(c) || !!ui.busy,
+          disabled: onBoard(c) || !!ui.busy || ui.signedOut,
           onclick: () => runRemaining(c.id),
         },
         busyLabel('remaining', 'Run remaining checks', 'Running checks…'),
@@ -1524,8 +1704,8 @@ function cardEvidence(c) {
     parts.notCounted.length
       ? [h('h3', {}, 'Not counted'), h('ul', { class: 'not-counted' }, parts.notCounted.map((t) => h('li', {}, t)))]
       : null,
-    h(
-      'details',
+    disclosure(
+      `full:${c.id}`,
       { class: 'full' },
       h('summary', {}, 'The draft verdict as text'),
       h(
@@ -1538,14 +1718,14 @@ function cardEvidence(c) {
           outdated ? 'Draft it again to copy' : 'Copy',
         ),
       ),
-      h('pre', { class: 'draft-text' }, d.summary),
+      h('pre', { class: 'draft-text', 'data-scroll': `verdict:${c.id}` }, d.summary),
     ),
   );
 }
 
 /** One copyable draft. An out-of-date one says so and can't be copied until it is drafted
  * again: it may quote evidence a correction set aside, or miss what a later check found. */
-function draftBlock(id, title, meta, text, stale) {
+function draftBlock(c, id, title, meta, text, stale) {
   return h(
     'article',
     { class: ['draft', stale && 'stale'], id: `draft-${id}`, 'aria-labelledby': `draft-${id}-h` },
@@ -1573,7 +1753,7 @@ function draftBlock(id, title, meta, text, stale) {
         )
       : null,
     h('p', { class: 'fine' }, meta),
-    h('pre', { class: 'draft-text', tabindex: '0' }, text),
+    h('pre', { class: 'draft-text', tabindex: '0', 'data-scroll': `${id}:${c.id}` }, text),
     h('p', { class: 'draft-note' }, 'Draft only: nothing is sent or filed.'),
   );
 }
@@ -1613,6 +1793,7 @@ function cardDrafts(c) {
     slot('drafts'),
     c.draftReply
       ? draftBlock(
+          c,
           'reply',
           'Reply to the recruiter',
           `One verification question per red flag · drafted ${stamp(c.draftReply.draftedAt)}. The person sends it, if they choose.`,
@@ -1622,6 +1803,7 @@ function cardDrafts(c) {
       : null,
     c.draftReport
       ? draftBlock(
+          c,
           'report',
           'Summary for helpline 1930 / cybercrime.gov.in',
           `Drafted ${stamp(c.draftReport.draftedAt)}. The person checks it, completes it and reports it themselves.`,
@@ -1665,16 +1847,18 @@ function cardPublish(c) {
   const posted = c.publishedVerdict;
   const band = draftCurrent(c) ? c.draftVerdict.band : null;
   const draft = ui.publish.get(c.id) ?? { label: '', note: '', picked: false };
-  // The label the band points to, until the person picks one; never one that doesn't fit.
+  const changed = ui.changed.get(c.id);
+  // The label the band points to, until the person picks one; never one that doesn't fit, and
+  // none on its own once the agent changed the case after the person read it.
   if (!draft.picked || labelMisfit(draft.label, band)) {
-    draft.label = BAND_LABEL[band] ?? '';
+    draft.label = changed ? '' : BAND_LABEL[band] ?? '';
     draft.picked = false;
   }
   ui.publish.set(c.id, draft);
   const blocked = publishBlocked(c);
   const syncButton = () => {
     const button = $('publish-btn');
-    if (button) button.disabled = !!ui.busy || !!blocked || !draft.label;
+    if (button) button.disabled = !!ui.busy || ui.signedOut || !!blocked || !draft.label;
   };
   let body;
   if (posted) {
@@ -1709,6 +1893,9 @@ function cardPublish(c) {
             onchange: (e) => {
               draft.label = e.target.value;
               draft.picked = true;
+              // Choosing the label is reading the case as it is shown now.
+              ui.read.set(c.id, c.revision);
+              if (ui.changed.delete(c.id)) $('publish-changed')?.remove();
               syncButton();
             },
           },
@@ -1741,6 +1928,13 @@ function cardPublish(c) {
           },
         }),
       ),
+      changed
+        ? h(
+            'p',
+            { class: 'blocked', id: 'publish-changed' },
+            `The agent changed this case after you read it: it called ${listed([...changed])}. Read it again, then choose the label.`,
+          )
+        : null,
       blocked ? h('p', { class: 'blocked', id: 'publish-blocked' }, blocked) : null,
       h(
         'div',
@@ -1753,7 +1947,7 @@ function cardPublish(c) {
             id: 'publish-btn',
             'data-focus': 'publish',
             'aria-describedby': blocked ? 'publish-blocked' : null,
-            disabled: !!ui.busy || !!blocked || !draft.label,
+            disabled: !!ui.busy || ui.signedOut || !!blocked || !draft.label,
           },
           busyLabel('publish', 'Publish to Offer Board', 'Publishing…'),
         ),
@@ -1792,7 +1986,7 @@ function cardOutcome(c) {
             class: 'btn',
             'aria-pressed': o?.value === value ? 'true' : 'false',
             'data-focus': `outcome-${value}`,
-            disabled: !!ui.busy,
+            disabled: !!ui.busy || ui.signedOut,
             onclick: () => recordOutcome(c.id, value),
           },
           text,
@@ -1819,7 +2013,7 @@ function introCard() {
       'ol',
       { class: 'steps' },
       step('Paste', 'the message a student forwarded. Each claim appears as a chip, highlighted where it came from.'),
-      step('Confirm', 'or correct the claims. Nothing is searched before a person does.'),
+      step('Confirm', 'or correct the claims. Nothing is searched until they are confirmed, and the page marks any the agent confirmed instead of you.'),
       step('Investigate.', 'Each search runs only when earlier results make it worthwhile, and the trace says why.'),
       step(
         'Decide.',
@@ -1840,6 +2034,8 @@ function renderMain() {
     fill($('case'), introCard());
     return;
   }
+  // Shown for the first time: from here on, the person has read the case at this revision.
+  if (!ui.read.has(c.id)) ui.read.set(c.id, c.revision);
   fill(
     $('case'),
     cardInvestigation(c),
@@ -1880,7 +2076,11 @@ function retractForm(caseId) {
     h(
       'div',
       { class: 'actions' },
-      h('button', { type: 'submit', class: 'btn danger', disabled: !!ui.busy }, busyLabel('retract', 'Retract verdict', 'Retracting…')),
+      h(
+        'button',
+        { type: 'submit', class: 'btn danger', disabled: !!ui.busy || ui.signedOut },
+        busyLabel('retract', 'Retract verdict', 'Retracting…'),
+      ),
       h(
         'button',
         {
@@ -1911,7 +2111,12 @@ function postItem(post) {
     h('p', { class: 'post-offer' }, post.offer ?? 'The message names no company, role or city.'),
     post.note ? h('p', { class: 'post-note' }, post.note) : null,
     h('p', { class: 'fine' }, `Published ${stamp(post.publishedAt)} by ${post.by === 'human' ? 'a person' : post.by}`),
-    h('details', { class: 'wa' }, h('summary', {}, 'The WhatsApp text'), h('pre', { class: 'draft-text' }, post.whatsapp)),
+    disclosure(
+      `wa:${post.caseId}`,
+      { class: 'wa' },
+      h('summary', {}, 'The WhatsApp text'),
+      h('pre', { class: 'draft-text', 'data-scroll': `wa:${post.caseId}` }, post.whatsapp),
+    ),
     h(
       'div',
       { class: 'actions' },
@@ -1928,7 +2133,7 @@ function postItem(post) {
               type: 'button',
               class: 'btn quiet',
               'data-focus': `retract-${post.caseId}`,
-              disabled: !!ui.busy,
+              disabled: !!ui.busy || ui.signedOut,
               onclick: () => startRetract(post.caseId),
             },
             'Retract…',
@@ -1985,6 +2190,10 @@ function logRow(entry) {
 function renderActivity() {
   const log = state.activityLog || [];
   const agents = log.filter((e) => e.actor === 'agent').length;
+  // At its end, the log follows the newest call; scrolled back, it stays where the person left it.
+  const old = $('log');
+  const follow = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 4;
+  const top = old?.scrollTop ?? 0;
   const list = log.length
     ? h('ol', { class: 'log', id: 'log', tabindex: '0', 'aria-label': 'Activity log, oldest first' }, log.map(logRow))
     : h('p', { class: 'empty' }, 'Nothing has run yet.');
@@ -1999,11 +2208,12 @@ function renderActivity() {
     h(
       'p',
       { class: 'sub' },
-      "Every call through the one invoke path, with who made it: a person's clicks are the human's; the planner's own checks are the agent's. Refusals are kept too.",
+      "Every call through the one invoke path, with who made it: a person's clicks are the human's; the planner's own checks, and every call without the person's session, are the agent's. Refusals are kept too.",
     ),
+    agentNote,
     list,
   );
-  if (log.length) list.scrollTop = list.scrollHeight;
+  if (log.length) list.scrollTop = follow ? list.scrollHeight : top;
 }
 
 // ---- the whole page -----------------------------------------------------------------------
@@ -2020,7 +2230,28 @@ function render() {
   }
 }
 
+/** What a redraw would otherwise lose: the caret in the focused field and how far each
+ * scrolling box was scrolled. Typed text is kept in `ui` as it is typed, and open <details> in
+ * `ui.open`. */
+function snapshot() {
+  const active = document.activeElement;
+  const field = active?.dataset?.focus && typeof active.setSelectionRange === 'function';
+  return {
+    caret: field
+      ? {
+          key: active.dataset.focus,
+          start: active.selectionStart,
+          end: active.selectionEnd,
+          direction: active.selectionDirection,
+          top: active.scrollTop,
+        }
+      : null,
+    scrolls: new Map([...document.querySelectorAll('[data-scroll]')].map((el) => [el.dataset.scroll, el.scrollTop])),
+  };
+}
+
 function draw() {
+  const kept = snapshot();
   renderHeader();
   renderStrip(state.server, state.calls || [], true);
   renderCaseBar();
@@ -2034,12 +2265,19 @@ function draw() {
     const el = document.querySelector(`[data-focus="${CSS.escape(ui.focusKey)}"]`);
     if (el && !el.disabled) {
       el.focus({ preventScroll: true });
+      if (kept.caret?.key === ui.focusKey && typeof el.setSelectionRange === 'function') {
+        el.setSelectionRange(kept.caret.start, kept.caret.end, kept.caret.direction);
+        el.scrollTop = kept.caret.top;
+      }
       // Focus the page moved on purpose (Confirm, then Investigate) is brought into view too.
       if (ui.revealFocus) {
         ui.revealFocus = false;
         revealEl(el, 'center');
       }
     }
+  }
+  for (const el of document.querySelectorAll('[data-scroll]')) {
+    if (kept.scrolls.has(el.dataset.scroll)) el.scrollTop = kept.scrolls.get(el.dataset.scroll);
   }
   for (const err of ui.errors.values()) err.fresh = false;
 }
@@ -2095,6 +2333,12 @@ function bindStatic() {
   document.addEventListener('focusin', (e) => {
     ui.focusKey = e.target?.dataset?.focus ?? null;
   });
+  document.addEventListener('compositionstart', () => {
+    composing = true;
+  });
+  document.addEventListener('compositionend', () => {
+    composing = false;
+  });
   document.addEventListener('focusout', (e) => {
     // Focus left for nowhere on purpose. A redraw removing the focused element fires this
     // too, and keeps the key so the new element takes the focus back.
@@ -2115,6 +2359,7 @@ async function init() {
   // From here on, a trace line or a call that appears is new, and is shown arriving.
   ui.primed = true;
   await Promise.all([loadSamples(), loadTools(), refreshBudget()]);
+  setInterval(watch, WATCH_MS);
 }
 
 init();

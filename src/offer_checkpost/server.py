@@ -1,10 +1,36 @@
 """The local web server: the app's page from ``web/``, and a JSON API whose one way to change
 anything is ``invoke``.
 
-It binds 127.0.0.1 and nothing else, because ``actor`` is a field of the request body: the
-human-only gate means something only while every request comes from this machine. Loopback
-alone doesn't stop a web page open in the same browser from sending a request to 127.0.0.1, so
-every request must also:
+Who is calling is never a field of a request. The server mints a link token, and ``serve``
+prints it in the address the person opens (``/?token=...``). The token works once: opening it
+trades it for a new session and a new link token (``serve`` prints the next address, which
+moves the person to another browser and signs the first one out), so the used address that
+the browser's history and the terminal's scrollback keep opens nothing.
+
+The session is two secrets, and a request is the person's (``human``) only with both:
+
+- a cookie, ``oc_session_<port>`` (HttpOnly, SameSite=Strict), which the browser keeps in its
+  cookie store, apart from anything a page or a plain file in its profile holds. Browsers
+  don't scope cookies by port, so every program listening on 127.0.0.1 that the browser
+  visits gets it too: the cookie alone is never the person;
+- a key the page sends in the ``X-Offer-Session`` header. The redirect hands it to the page in
+  the address's fragment, which no request carries, and the page keeps it in its
+  sessionStorage, which only this origin (scheme, host and port) can read. A page of another
+  origin can't send the header without a CORS preflight, which this server never approves.
+
+Every other request is the agent's, whatever it says: a script, an MCP client, a browser that
+was never given the address, a page whose session ended. A body that still names an ``actor``
+other than the session's is refused by ``invoke`` and logged as the session's; one that names
+the session's own is taken as if it named none. Nothing turns the agent into the person.
+
+That is a gate against the agent's interfaces, not against a program on this machine that can
+read the terminal or the browser's cookie store: such a program can act as the person anyway.
+No token or session secret is in an answer's body, the state or a log: the link token is only
+in the address ``serve`` prints, and the session only in the redirect that opens it.
+
+Everything the app holds can be read without the session, so the server binds 127.0.0.1 and
+nothing else. Loopback alone doesn't stop a web page open in the same browser from sending a
+request to 127.0.0.1, so every request must also:
 
 - name this server in its Host header, which a DNS-rebinding page can't (it names its own);
 - carry no Origin but this server's, and no Sec-Fetch-Site but ``same-origin`` or ``none``;
@@ -16,7 +42,8 @@ A request that fails any of these gets 403 and never reaches ``invoke``.
 
 ``GET /api/calls`` reads the call log without the store's lock, so the page's call-log strip
 grows while an investigation's POST holds the lock: a call-log entry is appended whole and
-never changed after. Every other read takes the lock, for a consistent snapshot.
+never changed after. It also counts the activity log, so the page notices calls it didn't make.
+Every other read takes the lock, for a consistent snapshot.
 
 A body is taken in only when everything in it can go back out as JSON: no lone surrogate (half
 of an emoji, cut when a message was copied), no number too large to be finite, and nesting no
@@ -24,24 +51,30 @@ deeper than a call needs. Each of these, once kept in the state or the activity 
 break every later answer that carried it, until a restart that loses everything in memory.
 
 No answer carries an exception's text, which could hold a request URL with the key in it, and
-the server prints nothing per request.
+the server prints nothing per request: only ``on_open``, when the address is opened, is given
+the next one.
 """
 
 from __future__ import annotations
 
 import copy
+import hmac
 import json
 import math
+import secrets
 import socketserver
 import sys
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from offer_checkpost import drafts, tools
-from offer_checkpost.invoke import invoke
+from offer_checkpost.invoke import UNCLAIMED, invoke
 from offer_checkpost.store import LONE_SURROGATE, Store
 
 HOST = "127.0.0.1"
@@ -80,10 +113,16 @@ _SECURITY_HEADERS = (
     ("Cache-Control", "no-store"),
 )
 
+# The cookie's name ends in the port (``oc_session_8741``), so a second app on another port
+# doesn't overwrite this one's and sign its person out.
+SESSION_COOKIE = "oc_session"
+SESSION_HEADER = "X-Offer-Session"
+
 _JSON = "application/json; charset=utf-8"
 _HTML = "text/html; charset=utf-8"
+# The app for the person, and for anyone else the page that says how to become them.
+_PAGE = "/"
 _STATIC = {
-    "/": ("index.html", _HTML),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
 }
@@ -95,6 +134,7 @@ _API_GET = {
     "/api/board.html": "_board",
 }
 _API_POST = "/api/invoke"
+_ROUTES = {_PAGE, *_STATIC, *_API_GET, _API_POST}
 
 
 @dataclass(frozen=True)
@@ -115,14 +155,44 @@ def _problem(status: int, outcome: str, error: str, *headers: tuple[str, str]) -
     return _json(status, {"ok": False, "outcome": outcome, "error": error}, *headers)
 
 
+def _secret() -> str:
+    # Base64url, never hex: 64 hex characters is the shape of a SerpApi key, which the secret
+    # scans look for.
+    return secrets.token_urlsafe(24)
+
+
+def _same(given: str, secret: str) -> bool:
+    return hmac.compare_digest(given.encode(), secret.encode())
+
+
+@dataclass(frozen=True)
+class Session:
+    """The person's two secrets (see the module docstring): the cookie's value, and the key the
+    page sends in the ``X-Offer-Session`` header."""
+
+    cookie: str
+    key: str
+
+
 class OfferServer(ThreadingHTTPServer):
     # On Windows, SO_REUSEADDR lets a second program bind the same port and take its requests.
     allow_reuse_address = sys.platform != "win32"
     daemon_threads = True
 
-    def __init__(self, store: Store, port: int, web_dir: Path):
+    def __init__(
+        self,
+        store: Store,
+        port: int,
+        web_dir: Path,
+        on_open: Callable[[str], None] | None = None,
+    ):
         self.store = store
         self.web_dir = web_dir
+        self.on_open = on_open
+        self._link = _secret()
+        # The one session there is: opening the address again replaces it.
+        self.session: Session | None = None
+        self._opening = threading.Lock()
         super().__init__((HOST, port), _Handler)
 
     def server_bind(self) -> None:
@@ -134,20 +204,64 @@ class OfferServer(ThreadingHTTPServer):
     def port(self) -> int:
         return self.server_address[1]
 
+    @property
+    def token(self) -> str:
+        """The link token the next opening of ``url`` takes."""
+        return self._link
+
+    @property
+    def url(self) -> str:
+        """The address the person opens, once: the one place the link token is shown."""
+        return f"http://{HOST}:{self.port}/?token={self._link}"
+
+    @property
+    def cookie_name(self) -> str:
+        return f"{SESSION_COOKIE}_{self.port}"
+
+    def open_session(self, token: str) -> Session | None:
+        """Trades the link token for a new session, replacing any earlier one, and mints the
+        next link token, which goes to ``on_open`` in the next address. None, changing nothing,
+        for any other token, including one already used."""
+        with self._opening:
+            if not _same(token, self._link):
+                return None
+            self._link = _secret()
+            self.session = Session(_secret(), _secret())
+            opened, url = self.session, self.url
+        if self.on_open:
+            self.on_open(url)
+        return opened
+
+    def holds_cookie(self, value: str) -> bool:
+        """Whether ``value`` is the session's cookie: a browser the address was opened in."""
+        session = self.session
+        return session is not None and _same(value, session.cookie)
+
+    def holds_key(self, value: str) -> bool:
+        session = self.session
+        return session is not None and _same(value, session.key)
+
 
 def make_server(
-    store: Store, host: str = HOST, port: int = DEFAULT_PORT, *, web_dir: Path | None = None
+    store: Store,
+    host: str = HOST,
+    port: int = DEFAULT_PORT,
+    *,
+    web_dir: Path | None = None,
+    on_open: Callable[[str], None] | None = None,
 ) -> OfferServer:
     """A server for ``store`` on 127.0.0.1:``port`` (0 picks a free port), bound but not yet
     serving; ``serve_forever`` serves it. Any other host raises ValueError before anything is
-    bound. Records the bound address in ``store.server["bind"]``. ``web_dir`` holds the page,
-    ``web/`` beside ``src/`` unless given."""
+    bound. Records the bound address in ``store.server["bind"]``; the address the person opens,
+    with a link token minted for this server, is ``url``, and each time it is opened,
+    ``on_open`` gets the next one. ``web_dir`` holds the page, ``web/`` beside ``src/`` unless
+    given."""
     if host != HOST:
         raise ValueError(
-            f"Offer Checkpost listens on {HOST} only, not {host!r}: the caller is a field of "
-            "each request, so only this machine may send one"
+            f"Offer Checkpost listens on {HOST} only, not {host!r}: everything it holds can be "
+            "read without the person's session, so only this machine may ask"
         )
-    server = OfferServer(store, port, web_dir or WEB_DIR)
+    server = OfferServer(store, port, web_dir or WEB_DIR, on_open)
     with store.lock:
         store.server["bind"] = f"{HOST}:{server.port}"
     return server
@@ -169,7 +283,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             answer = self._answer(path)
         except Exception as failure:
-            where = path if path in _STATIC or path in _API_GET or path == _API_POST else "?"
+            where = path if path in _ROUTES else "?"
             # The type only: an exception's text can carry a request URL with the key in it.
             print(
                 f"offer_checkpost: internal error on {self.command} {where}: "
@@ -187,7 +301,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _answer(self, path: str) -> _Answer:
         if refusal := self._foreign():
             return _problem(HTTPStatus.FORBIDDEN, "refused", refusal)
-        if path in _STATIC or path in _API_GET:
+        if path == _PAGE or path in _STATIC or path in _API_GET:
             allowed = "GET"
         elif path == _API_POST:
             allowed = "POST"
@@ -202,6 +316,8 @@ class _Handler(BaseHTTPRequestHandler):
             )
         if allowed == "POST":
             return self._invoke()
+        if path == _PAGE:
+            return self._page()
         if path in _STATIC:
             return self._static(*_STATIC[path])
         return getattr(self, _API_GET[path])()
@@ -220,6 +336,25 @@ class _Handler(BaseHTTPRequestHandler):
         if site is not None and site.strip().lower() not in ("same-origin", "none"):
             return "a request from another site's page is refused"
         return None
+
+    def _signed_in(self) -> bool:
+        """Whether this request carries the session's cookie: sent by the browser the address
+        was opened in, and by nothing that didn't take it from there."""
+        name = self.server.cookie_name
+        return any(
+            key.strip() == name and self.server.holds_cookie(value.strip())
+            for header in self.headers.get_all("Cookie") or []
+            for key, _, value in (pair.partition("=") for pair in header.split(";"))
+        )
+
+    def _person(self) -> bool:
+        """Whether this request carries both halves of the session: the cookie, and the key
+        only the page opened from the address holds."""
+        keys = self.headers.get_all(SESSION_HEADER) or []
+        return len(keys) == 1 and self.server.holds_key(keys[0].strip()) and self._signed_in()
+
+    def _actor(self) -> str:
+        return "human" if self._person() else "agent"
 
     # ---- the one route that changes anything --------------------------------------------
 
@@ -252,24 +387,48 @@ class _Handler(BaseHTTPRequestHandler):
             return _problem(
                 HTTPStatus.BAD_REQUEST,
                 "error",
-                'the body must be a JSON object: {"tool": ..., "args": {...}, "actor": ...}',
+                'the body must be a JSON object: {"tool": ..., "args": {...}}',
             )
         if unfit := _unfit(call):
             return _problem(HTTPStatus.BAD_REQUEST, "error", unfit)
-        # A missing or forged actor goes through too: invoke refuses it and logs the refusal.
-        return _json(
-            HTTPStatus.OK,
-            invoke(call.get("tool"), call.get("args"), call.get("actor"), store=self.server.store),
+        # An actor the body names is never taken: invoke refuses one that isn't the session's,
+        # and logs the refusal as the session's.
+        out = invoke(
+            call.get("tool"),
+            call.get("args"),
+            self._actor(),
+            store=self.server.store,
+            claimed=call.get("actor", UNCLAIMED),
         )
+        return _json(HTTPStatus.OK, out)
 
     # ---- reads ----------------------------------------------------------------------------
 
-    def _static(self, name: str, content_type: str) -> _Answer:
+    def _page(self) -> _Answer:
+        """The app for the browser the address was opened in, and for any other the page that
+        says where the address is. ``?token=`` with the live link token opens a session: its
+        cookie, and a redirect to a bare ``/`` whose fragment hands the page the session's key.
+        Any other token, including a used one, gets the page that says where the address is.
+
+        A navigation can't carry the key, so the cookie alone picks the page; what the page
+        then does is the person's only with the key as well."""
+        given = parse_qs(self.path.partition("?")[2], keep_blank_values=True).get("token")
+        if given is None:
+            return self._static("index.html" if self._signed_in() else "session.html", _HTML)
+        session = self.server.open_session(given[0]) if len(given) == 1 else None
+        if session is None:
+            return self._static("session.html", _HTML, HTTPStatus.FORBIDDEN)
+        # No Max-Age: the cookie ends with the browser session, and the session with the server.
+        cookie = f"{self.server.cookie_name}={session.cookie}; HttpOnly; SameSite=Strict; Path=/"
+        headers = (("Location", f"/#session={session.key}"), ("Set-Cookie", cookie))
+        return _Answer(HTTPStatus.SEE_OTHER, b"", _HTML, headers)
+
+    def _static(self, name: str, content_type: str, status: int = HTTPStatus.OK) -> _Answer:
         try:
             body = (self.server.web_dir / name).read_bytes()
         except FileNotFoundError:
             return _problem(HTTPStatus.NOT_FOUND, "error", "not found")
-        return _Answer(HTTPStatus.OK, body, content_type)
+        return _Answer(status, body, content_type)
 
     def _state(self) -> _Answer:
         return _json(HTTPStatus.OK, self.server.store.state())
@@ -280,7 +439,16 @@ class _Handler(BaseHTTPRequestHandler):
         # the entries in it are never changed after they are appended.
         calls = list(store.calls)
         return _json(
-            HTTPStatus.OK, {"server": copy.deepcopy(store.server), "calls": copy.deepcopy(calls)}
+            HTTPStatus.OK,
+            {
+                "server": copy.deepcopy(store.server),
+                "calls": copy.deepcopy(calls),
+                # A length, read without the lock like the call log: the page re-reads the
+                # state when it changes, so it shows calls it didn't make.
+                "activity": len(store.activity_log),
+                # Who this request counts as: a page whose session ended can say so.
+                "caller": self._actor(),
+            },
         )
 
     def _tools(self) -> _Answer:

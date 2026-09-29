@@ -155,8 +155,12 @@ def _update_claims(call: Call, args: dict[str, Any]) -> dict[str, Any]:
             staled.append(signal["id"])
     if confirm:
         for field in CLAIM_FIELDS:
-            if claims[field] is not None:
-                claims[field]["confirmed"] = True
+            claim = claims[field]
+            # Who confirmed is kept, so the page never says a person checked what the agent
+            # confirmed. A person's confirmation stands when the agent confirms again.
+            if claim is not None and (not claim["confirmed"] or call.actor == "human"):
+                claim["confirmed"] = True
+                claim["confirmedBy"] = call.actor
     if changed:
         case["revision"] += 1
         call.store.refresh_fingerprint(case)
@@ -304,12 +308,15 @@ _TOOLS = (
         "are marked stale, so the verdict sets them aside, and the case's fingerprint is "
         "recomputed; a new fee amount stales nothing, since the rules read only whether a fee "
         "is asked. A corrected claim is unconfirmed again. `confirm: true` marks every "
-        "claim the case has as confirmed, which investigate requires. Returns the claims, "
-        "the corrected fields and the ids of the signals made stale. Does NOT delete, re-fire "
-        "or re-score any signal (investigate again for fresh ones), change the recruiter's "
-        "contacts or links, or touch the drafts, the Offer Board or the case's status. It refuses "
-        "a case whose verdict is on the Offer Board (a person retracts it first), and a field "
-        "other than company, role, city, pay and fee; each refusal is logged.",
+        "claim the case has as confirmed, which investigate requires, and records who "
+        "confirmed it (confirmedBy): the app shows the person which claims the agent "
+        "confirmed, and the agent confirming again never replaces a person's confirmation. "
+        "Returns the claims, the corrected fields and the ids of the signals made stale. Does "
+        "NOT delete, re-fire or re-score any signal (investigate again for fresh ones), change "
+        "the recruiter's contacts or links, or touch the drafts, the Offer Board or the case's "
+        "status. It refuses a case whose verdict is on the Offer Board (a person retracts it "
+        "first), and a field other than company, role, city, pay and fee; each refusal is "
+        "logged.",
         obj(
             {
                 "case_id": CASE_ID,

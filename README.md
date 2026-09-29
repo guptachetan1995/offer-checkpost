@@ -1,31 +1,77 @@
 # Offer Checkpost
 
+Offer Checkpost is for the person students forward suspicious job offers to: a college
+placement officer, a training-institute coordinator, or an NGO or cyber-cell volunteer. Scam
+offers are sent in bulk, so the same message reaches them from many students. They paste it
+once. Offer Checkpost treats it as a set of claims and checks each one against
+[SerpApi](https://serpapi.com) results **before** a student pays a "refundable registration
+fee", replies to the recruiter, or sends a photo of their Aadhaar card. The students get the
+answer as a WhatsApp message or a shared page, and install nothing.
+
 A scammer can forge a job offer, but not the search results about it. The company's official
 domain is in Google's knowledge graph, and that domain may carry the company's own warning that
 it never charges candidates. A real opening is listed on Google Jobs, and a real office shows
 up on Google Maps.
 
-Offer Checkpost is for the person students forward these messages to: a college placement
-officer, a training-institute coordinator, or an NGO or cyber-cell volunteer. They paste the
-offer. Offer Checkpost treats it as a set of claims and checks each one against live
-[SerpApi](https://serpapi.com) results **before** a student pays a "refundable registration
-fee", replies to the recruiter, or sends a photo of their Aadhaar card. The student gets the
-answer as a WhatsApp message or a shared page, and installs nothing.
-
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
-**Status: the investigator and the local web app are built; the recorded SerpApi responses
-and the demo video are next.** Offer-text extraction (the claims and the four text rules, in
-English and romanised Hinglish, with Indian money and `+91` phone formats), domain
-classification (registrable domains, free mail, look-alikes), listing-pay parsing, the SerpApi
-checks, the decision table, the planner, the drafts, the one `invoke` path with the agent's
-tools and the human-only verbs, and the web app on `127.0.0.1` are in place, with their tests
-and 21 fictional sample offers in `samples/offers/`. `python -m offer_checkpost serve` runs the
-app ([Run it](#run-it)), and `python -m offer_checkpost investigate <file>` runs an offer
-through the same path from the command line. Until the recorded responses are in the
-repository, replay mode has nothing to serve: each search in it fails and says so, and
-`--provider fake` shows the whole flow on the three demo samples with synthetic data.
+**Status: the investigator, the local web app and its MCP adapter are built and tested; the
+recorded SerpApi responses and the demo video are next.** `python -m offer_checkpost serve`
+runs the app ([Run it](#run-it)), `python -m offer_checkpost mcp` serves its agent tools to an
+MCP client ([Use it from an MCP client](#use-it-from-an-mcp-client)), and
+`python -m offer_checkpost investigate <file>` runs an offer through the same path from the
+command line; `samples/offers/` holds 21 fictional offers to try. With a SerpApi key it
+searches live. Without one it starts in replay mode, which serves SerpApi responses recorded
+with a real key. None are in the repository yet: they are recorded before submission, and
+until then each search in replay fails and says so. `--provider fake` shows the whole flow on
+the three demo samples with synthetic data.
+
+## What's different here
+
+- **Built for the intermediary, so one check answers the batch.** The person who runs it gets
+  the same bulk-sent offer from many students. A forward that makes the same claims as a
+  message already checked (the same company, role, city, pay, fee and recruiter contacts, in
+  any spacing or case) is answered from that check at 0 searches while the app runs, and its
+  trace names the case it reused. The claims fingerprint is `fingerprint` in
+  `src/offer_checkpost/store.py`, the reuse is `_reuse` in `src/offer_checkpost/planner.py`,
+  and `samples/offers/a-forwarded.txt` is Sample A forwarded again.
+- **The decisive evidence is the employer contradicting the message.** When the message asks
+  for a fee and the knowledge graph names the employer's official domain, a `site:` search of
+  that domain looks for the employer's own recruitment-fraud notice. A notice saying it charges
+  candidates nothing fires `fee_contradicts_employer`, a strong red signal quoted with its link
+  (`read_fraud_notice` in `src/offer_checkpost/checks.py`, the rule table in
+  `src/offer_checkpost/rules.py`).
+- **Each search is chosen from what the earlier ones found.** The planner reorders and skips
+  checks by what the earlier searches found, stops once the band is high risk and no search
+  left can change it, and its trace shows every search with its reason, every skip, and the
+  searches saved. Every search sends a `json_restrictor`, so SerpApi returns only the fields
+  its reader uses (`src/offer_checkpost/planner.py`, `RESTRICTORS` in
+  `src/offer_checkpost/checks.py`).
+- **It never certifies an offer.** On the page, the board and the WhatsApp text, its best band
+  reads "No contradictions found" (the tools and the command line name it
+  `consistent_with_genuine`), never "verified", "safe" or a 0-100 score, and the board refuses
+  a label that says more than the checks found. A verdict posted for others is a person's click, and the post is a snapshot of
+  the claims and evidence they read, which nothing done to the case afterwards rewrites
+  (`label_misfit` and `post` in `src/offer_checkpost/drafts.py`, `publish_verdict` in
+  `src/offer_checkpost/verbs.py`).
+- **The agent can't act as the person through the app's tools, API or MCP adapter.** The
+  agent's 17 tools (`src/offer_checkpost/tools.py`) and the person's four verbs
+  (`src/offer_checkpost/verbs.py`) are separate lists, and `invoke`
+  (`src/offer_checkpost/invoke.py`) refuses the verbs to the agent. The person is the browser
+  that opened the address the app prints; a request can't claim to be them, and the MCP
+  adapter is always the agent ([Run it](#run-it); `tests/test_gate.py`,
+  `tests/test_server_http.py`, `tests/test_mcp.py`).
+
+## For judges: where to look
+
+| Criterion | Where to look |
+|---|---|
+| **Idea strength** | The opening lines and [The problem](#the-problem): who runs it, why one check serves a batch, and why the two kinds of mistake cost different things. [What it can't check](#what-it-cant-check) says where the idea stops. |
+| **Originality** | [What's different here](#whats-different-here), each point with the file it lives in. |
+| **Technical complexity** | `src/offer_checkpost/planner.py`, whose docstring is the whole policy (order, reorder rules, stops, budget, quota guard, reuse, the trace's fields); `extract.py` (claims with source spans; ₹, K, LPA, lakh and `+91`; romanised Hinglish); `domains.py` (registrable domains, look-alikes); `salary.py` (listing pay to monthly, the median benchmark); `invoke.py` (the one path in); `server.py` (the session, the loopback guards); `mcp_server.py`. `tests/`: the rules and bands, one planner trace per demo sample, HTTP over a real socket, the MCP adapter over its pipes, and the page in Chrome; `./verify.sh` runs them all. |
+| **Usefulness** | [How it works](#how-it-works), step 4: the recruiter reply, the 1930 summary, and the Offer Board's "Copy for WhatsApp" text. [Setup, run, test](#setup-run-test) has macOS, Linux and Windows commands; [Keys and privacy](#keys-and-privacy) says what leaves the machine. |
+| **Meaningful SerpApi usage** | [Where SerpApi comes in](#where-serpapi-comes-in): each engine, the fields read, the rules it can fire, and the India parameters. `src/offer_checkpost/checks.py` (one params builder and one reader per check), `providers.py` (live with a disk cache, replay, fake; the key kept out of every log and error), the Account API quota guard in `planner.py`, and `tests/test_checks.py`. |
 
 ## The problem
 
@@ -50,7 +96,9 @@ contradictions found", and a verdict posted for others to read is always a perso
 
 1. **Paste the message.** Offer Checkpost extracts the claims (company, role, city, pay, any
    fee, the recruiter's email, phone and links) and shows each one as a chip, highlighted where
-   it came from in the text. You confirm or correct the chips before anything is searched.
+   it came from in the text. The claims are confirmed or corrected before anything is searched:
+   by you in the page, or by the agent through `update_claims`. The page marks the claims the
+   agent confirmed as the agent's, and the activity log shows the call.
    Four rules read the text directly: money asked for, identity documents asked for early, an
    interview held only in chat, and the paid-likes or "prepaid task" pattern. On their own they
    leave the verdict at *unverified*, because the message alone proves nothing.
@@ -70,8 +118,8 @@ contradictions found", and a verdict posted for others to read is always a perso
    searches on its own. Investigating a case again checks it afresh: the earlier findings are
    set aside, so no finding is ever counted twice.
 3. **Read the evidence.** Each finding is a named rule fired by a quoted search result with a
-   link. The draft verdict is one of three bands: *high risk*, *unverified*, or *consistent
-   with a genuine offer*.
+   link. The draft verdict is one of three bands: *high risk*, *unverified*, or "No
+   contradictions found" (`consistent_with_genuine` in the tools and on the command line).
 4. **Act, as a person.** Copy the drafted verification reply to the recruiter (one question per
    red flag), use the pre-filled summary for the national cybercrime helpline **1930** /
    cybercrime.gov.in if money has already gone, or, as a placement officer, publish a verdict
@@ -79,51 +127,51 @@ contradictions found", and a verdict posted for others to read is always a perso
    reaches students as "Copy for WhatsApp" text or as a downloaded HTML page.
 
    A post is the case exactly as the person read it: publishing is refused if anything changed
-   after they last looked (a correction, or a check the agent ran), and the post keeps its own
+   after they last looked (a correction, or a check the agent ran). When the agent changes a
+   case the page shows, the page says what it called and clears the chosen label, so the
+   person reads the case again before publishing it. The post keeps its own
    copy of the claims and evidence, so nothing done to the case afterwards rewrites what
    students were sent. A case on the board can't be corrected or checked again until a person
    retracts its verdict. The label can't say more than the checks found: "No contradictions
    found" only for that band, and a red-flag label never for it.
 
-**Who "the agent" is:** the automated investigator (the planner), or any MCP client. No LLM
-runs inside the app.
-
-**Why not a text classifier?** Many fake-job detectors train a classifier on the wording of
-job posts. That learns what scam text looks like, and a scammer can reword the message. Offer
-Checkpost checks what the message *claims* against the web instead, which the scammer can't
-change, and every conclusion comes from a named rule with the search result behind it.
+**Who "the agent" is:** the automated investigator (the planner), an MCP client, or anything
+else that talks to the app without the person's session ([Run it](#run-it) says how a browser
+becomes the person). No LLM runs inside the app.
 
 ### Where SerpApi comes in
 
-| Engine | What it checks | Fields read | Rules it can fire | In the demo video |
-|---|---|---|---|---|
-| `google` (knowledge graph, organic) | The company's official domain, and whether the recruiter's email or link domain is that domain, a look-alike, or a free-mail address | `knowledge_graph.website`, `organic_results[].link` | `sender_official`, `sender_lookalike`, `sender_free_mail`, `no_web_footprint` | yes |
-| `google` with `site:<official domain>` | Whether the employer's own site publishes a recruitment-fraud notice that says it never charges fees; whether it mentions a look-alike domain, and in what context | `organic_results[].title`, `.snippet`, `.link` | `fee_contradicts_employer`, `employer_fraud_notice_exists`, `domain_named_in_fraud_notice` | yes |
-| `google_jobs` | Whether this company lists this role near this city, with an apply option on the official domain, and what comparable roles there pay | `jobs_results[].apply_options`, `.detected_extensions.salary` (then `.extensions`, then `.description`) | `listing_match`, `no_listing_match`, `pay_outlier` | yes |
-| `google_maps` | Whether the claimed office exists as a place | `local_results[].place_id`, `.title`, `.address` | `office_found`, `office_not_found` | yes |
-| `google_news` | Reports of fake offers made in this company's name (a weak signal, since big brands are impersonated constantly) | `news_results[].title`, `.link`, `.source.name` | `impersonation_reports` | yes |
-| `google_maps_reviews` (`query` filter), conditional | Whether reviews at a found office mention fees; runs only when a fee was asked or no listing matched | `reviews[].snippet`, `.iso_date`, `.link`; never the reviewer | `reviews_mention_fees` | no |
-| `google`, exact phrase, conditional | Whether a real recruiter phone or email already appears next to scam reports | `organic_results[].snippet` | `contact_reported` | no |
-| Account API (free) | Searches left this month, shown in the header | the five usage counts only | none, but it feeds the quota guard | yes |
+| Engine | What it checks | Fields read | Rules it can fire |
+|---|---|---|---|
+| `google` (knowledge graph, organic) | The company's official domain, and whether the recruiter's email or link domain is that domain, a look-alike, or a free-mail address | `knowledge_graph.website`, `organic_results[].link` | `sender_official`, `sender_lookalike`, `sender_free_mail`, `no_web_footprint` |
+| `google` with `site:<official domain>` | Whether the employer's own site publishes a recruitment-fraud notice that says it never charges fees; whether it mentions a look-alike domain, and in what context | `organic_results[].title`, `.snippet`, `.link` | `fee_contradicts_employer`, `employer_fraud_notice_exists`, `domain_named_in_fraud_notice` |
+| `google_jobs` | Whether this company lists this role near this city, with an apply option on the official domain, and what comparable roles there pay | `jobs_results[].apply_options`, `.detected_extensions.salary` (then `.extensions`, then `.description`) | `listing_match`, `no_listing_match`, `pay_outlier` |
+| `google_maps` | Whether the claimed office exists as a place | `local_results[].place_id`, `.title`, `.address` | `office_found`, `office_not_found` |
+| `google_news` | Reports of fake offers made in this company's name (a weak signal, since big brands are impersonated constantly) | `news_results[].title`, `.link`, `.source.name` | `impersonation_reports` |
+| `google_maps_reviews` (`query` filter), conditional | Whether reviews at a found office mention fees; runs only when a fee was asked or no listing matched | `reviews[].snippet`, `.iso_date`, `.link`; never the reviewer | `reviews_mention_fees` |
+| `google`, exact phrase, conditional | Whether a real recruiter phone or email already appears next to scam reports | `organic_results[].snippet` | `contact_reported` |
+| Account API (free) | Searches left this month, shown in the header | the five usage counts only | none, but it feeds the quota guard |
 
 **India parameters, per engine:** `google` and `google_jobs` use `gl=in`,
 `google_domain=google.co.in` and an Indian-city `location`; `google_maps` uses `location` plus
 `z`, with `gl=in` and `google_domain=google.co.in`; `google_news` uses `gl=in` and `hl=en`;
 `google_maps_reviews` uses `place_id` and `hl=en`.
 
-Every call goes through SerpApi's official Python client with a `json_restrictor`, so SerpApi
-returns only the fields listed above. Results are cached locally, and the app stays well inside
-the free plan's 50 searches an hour. A check spends at most 6 searches by default, and a
-decisive one stops at 2. So the free plan's 250 searches a month, less a 20-search reserve,
-covers at least 38 checks, and the same bulk-sent message forwarded again (the same company,
-role, city, pay, fee and recruiter contacts) is answered from the earlier check at 0 searches.
+Every search goes through SerpApi's official Python client with a `json_restrictor`, so
+SerpApi returns only the fields its reader uses. Live results are cached locally for 24 hours.
+A check spends at most 6 searches by default and stops as soon as the evidence is decisive, so
+the free plan's 250 searches a month, less a 20-search reserve, covers at least 38 checks, and
+its 50 searches an hour at least 8. The same bulk-sent message forwarded again (the same
+company, role, city, pay, fee and recruiter contacts) is answered from the earlier check at 0
+searches.
 
 ## What the agent does, what only the human does
 
 | | Agent | Human |
 |---|---|---|
-| Extract claims from the pasted message | Yes | Confirms or corrects them |
-| Run searches and fire rules | Yes, within a per-case search budget, stopping when decisive | Starts an investigation |
+| Extract claims from the pasted message | Yes | Checks them against the message |
+| Confirm or correct the claims | Yes, and the page marks the claims it confirmed as the agent's | Yes |
+| Run searches and fire rules | Yes, within a per-case search budget, stopping when decisive | Starts an investigation from the page |
 | Spend searches after the evidence is already decisive | **Never** | `run_remaining_checks` |
 | Draft the verdict, the recruiter reply and the 1930 summary | Yes, drafts only | Reads them |
 | Send a message, file a report, contact a recruiter | **Never**: the app has no way to do any of these | Does it themselves, outside the app |
@@ -140,7 +188,7 @@ cannot see the screen, and each one says what the tool does not do.
 | Tool | What it does | What it does not do |
 |---|---|---|
 | `open_case` | Stores the pasted message, extracts claims with their source spans, runs the text rules | Search anything or contact anyone |
-| `update_claims` | Corrects or confirms extracted claims, and flags the findings that depended on a corrected claim as stale (a new fee amount flags none: the rules read only whether a fee is asked) | Delete, re-fire or re-score findings; touch drafts or the board; change a case whose verdict is on the board |
+| `update_claims` | Corrects or confirms extracted claims, recording who confirmed them, and flags the findings that depended on a corrected claim as stale (a new fee amount flags none: the rules read only whether a fee is asked) | Delete, re-fire or re-score findings; touch drafts or the board; change a case whose verdict is on the board |
 | `lookup_official_site` | Finds the official domain and classifies the recruiter's domains | Treat the official site as proof the offer is genuine |
 | `find_fraud_notice` | Quotes a recruitment-fraud notice from the employer's own domain, and says whether it mentions fees | Run before an official domain is known, or quote any other site as the employer |
 | `confirm_sender_domain` | Checks whether the official site mentions a look-alike domain, as its own second domain or as a known fake | Open either site, or check a domain that isn't in the offer |
@@ -164,23 +212,25 @@ Four verbs are **human only**: `publish_verdict` (posts a verdict, with its evid
 Offer Board, exactly as the person read the case), `retract_verdict` (removes a post and logs why), `record_outcome` (records the
 person's own decision) and `run_remaining_checks` (spends searches after a decisive result).
 They are **never registered as a tool**. The agent's tool list doesn't include them, and they
-refuse any caller but the human, even when called directly. A click in the UI counts as the
-human; the planner's own searches count as the agent, and the activity log shows both. The
-caller is a field in the request, which is safe only because the server listens on
-`127.0.0.1` alone.
+refuse any caller but the human, even when called directly. A click in the page opened from
+the address the app prints counts as the human; the planner's own searches, and every other
+caller, count as the agent, and the activity log shows both. Who is calling comes from that
+session, never from the request: a request that says it is the person is refused, and logged
+as the agent's.
 
 ## Stack
 
 - Python 3.13 for development, runs on 3.11+
 - [`serpapi`](https://pypi.org/project/serpapi/) 1.1.2, SerpApi's official Python client, as
   the only runtime dependency
-- Standard-library HTTP server; plain HTML, CSS and JavaScript UI with no build step
+- Standard-library HTTP server; plain HTML, CSS and JavaScript UI with no build step; a
+  standard-library MCP adapter over stdio (no MCP SDK)
 - pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and,
   next, the demo recording
 - Three search providers behind one interface: **live** (your SerpApi key, with a local
-  cache), **replay** (real SerpApi responses recorded during development and labelled with
-  their date; no key needed; the recordings are next), and **fake** (synthetic data for the
-  tests)
+  cache), **replay** (serves SerpApi responses recorded with a real key, trimmed and labelled
+  with their date, and needs no key; the recordings are made before submission and are not in
+  the repository yet), and **fake** (synthetic data for the tests)
 
 ## Setup, run, test
 
@@ -191,7 +241,7 @@ or Linux:
 ```bash
 cp .env.example .env          # add your own SERPAPI_KEY, or leave it empty for replay mode
 make setup                    # virtualenv + hash-locked install (PY=python3.x for another 3.11+)
-make run                      # http://127.0.0.1:8741
+make run                      # prints the address to open: http://127.0.0.1:8741/?token=…
 make test                     # the whole suite, offline
 make lint
 ./verify.sh                   # everything above, as one check
@@ -223,25 +273,52 @@ On Windows:
 .venv\Scripts\python -m offer_checkpost serve --provider fake --port 8800
 ```
 
-It prints one line, the address to open (`http://127.0.0.1:8741` unless you chose another
-port) and the provider serving searches, then runs until Ctrl-C. Everything in it is gone when
-it stops.
+Run it in your own terminal. It prints the address to open, `http://127.0.0.1:8741/?token=…`
+(with the port you chose), and the provider serving searches, then runs until Ctrl-C. Open
+that address in your browser: it is what makes the browser the person. The address works once.
+When it is opened, the terminal prints the next one, which makes another browser (or a
+browser whose session ended) the person instead and signs the first one out. Cases and the
+Offer Board are gone when the app stops, and the address changes each time it starts.
 
 - **Which searches it serves.** `--provider`, else `OFFER_CHECKPOST_PROVIDER`, else **live**
-  SerpApi when `SERPAPI_KEY` is set, else **replay**: real SerpApi responses recorded on a
-  stated date, with no key needed. Each setting is read from the environment, else from `.env`
-  in the directory you run it from, so a key kept in `.env` needs no `export`. The page names
-  the provider in its header, and in replay a banner says when the responses were recorded
-  and that they are not live. **fake** serves
-  the synthetic data the tests use: it shows the flow, not real search results.
-- **Only this machine.** The server listens on `127.0.0.1` and refuses to start on any other
-  address. Who is calling (`human` for a click in the page, `agent` for the planner or an MCP
-  client) is a field of each request, so the human-only verbs stay human-only only while every
-  request comes from this machine. A web page open in the same browser can still send
-  requests to `127.0.0.1`, so the server also refuses a request addressed to any other host
-  name, one sent from another site's page, and a call that isn't sent as JSON, which another
-  site's page can't send without first asking the browser for a permission this server never
-  grants.
+  SerpApi when `SERPAPI_KEY` is set, else **replay**: SerpApi responses recorded with a real
+  key on a stated date, served with no key. Each setting is read from the environment, else
+  from `.env` in the directory you run it from, so a key kept in `.env` needs no `export`. The
+  page names the provider in its header, and in replay a banner says when the responses were
+  recorded and that they are not live, or, while nothing is recorded, that every search fails
+  and nothing is made up. **fake** serves the synthetic data the tests use: it shows the flow,
+  not real search results.
+- **Who is the person.** The browser that opens the address printed in the terminal, in the
+  tab it opened it in. Opening the address uses up its token and starts a session with two
+  halves, and only a call carrying both is the person's (`human`):
+  - a cookie, `oc_session_<port>` (HttpOnly, SameSite=Strict), kept in the browser's cookie
+    store. Browsers don't scope cookies by port, so any other program listening on 127.0.0.1
+    that the browser visits receives it too. That is why the cookie alone is never the person;
+  - a key the page sends in a request header. It reaches the page in the address's fragment,
+    which no request carries, and the page keeps it in the tab's sessionStorage, which only
+    this origin (scheme, host and port) can read. Another site's page, or one on another
+    port, can't send that header without a permission this server never grants.
+
+  The used address, which the browser's history and the terminal keep, opens nothing. Every
+  other call to the running app is the agent's (`agent`): an MCP client, a local script, a
+  browser or tab that was never given the address, or a page whose session ended (the app
+  restarted, or the address was opened elsewhere), which says so and turns off the human-only
+  buttons until the newest address is opened. A request can't choose: one whose body names
+  another `actor` is refused, and logged as whoever its session makes it.
+  `investigate` never talks to the running app: it works on its own copy in its own process,
+  `--as agent` makes its calls the agent's, and it publishes nothing either way. `mcp` talks to
+  the running app, always as the agent.
+- **What that gate is for.** It holds against the agent's own ways in: its tool list, the
+  API and the MCP adapter. It is not a defence against a program that runs as you on your
+  machine. Whatever starts `serve` or reads its terminal sees the address, so start it
+  yourself, never through an agent's shell tool. A program that can read your browser's cookie
+  store can act as you, here as in any other app you are signed in to.
+- **Only this machine.** Everything the app holds can be read without the session, so the
+  server listens on `127.0.0.1` and refuses to start on any other address. A web page open in
+  the same browser can still send requests to `127.0.0.1`, so the server also refuses a
+  request addressed to any other host name, one sent from another site's page, and a call that
+  isn't sent as JSON, which another site's page can't send without first asking the browser for
+  a permission this server never grants.
 
 To watch the planner work on a sample offer with no key, against the synthetic test data:
 
@@ -256,9 +333,60 @@ published from the command line: publishing is a person's click in the app.
 `./verify.sh` checks this README, the licence, the ignore rules for secrets and the sample
 environment file, then runs lint and the tests (`PY=python3.12 ./verify.sh` builds its
 virtualenv from another 3.11+ interpreter). The end-to-end tests drive the page itself in Google
-Chrome through Playwright (paste, confirm, investigate, publish, corrections, the call-log strip,
-the replay banner); where Chrome isn't installed they are skipped with the reason, and no
-browser is ever downloaded.
+Chrome through Playwright (the session address and its single use, what a program on another
+port gets from the browser, paste, confirm, investigate, publish, corrections, the call-log
+strip, the replay banner, the agent's calls showing up while you type, a label chosen before
+the agent changed the case, claims the agent confirmed, a session that ended); where Chrome
+isn't installed they are skipped with the reason, and no browser is ever downloaded.
+
+### Use it from an MCP client
+
+`python -m offer_checkpost mcp` serves the agent's tools to an MCP client over stdio
+(newline-delimited JSON-RPC; protocol versions 2025-11-25, 2025-06-18 and 2025-03-26; tools
+only). It is a client of the running app, not a second copy of it, so start the app first and
+open the address it prints, then register the adapter. Start the app yourself, in your own
+terminal, never through the MCP client's shell tool: whatever starts it reads the address that
+makes a browser the person. In Claude Code, from this directory:
+
+```bash
+claude mcp add offer-checkpost -- "$PWD/.venv/bin/python" -m offer_checkpost mcp
+```
+
+For a client that reads an `mcpServers` JSON file:
+
+```json
+{
+  "mcpServers": {
+    "offer-checkpost": {
+      "command": "/absolute/path/to/offer-checkpost/.venv/bin/python",
+      "args": ["-m", "offer_checkpost", "mcp"]
+    }
+  }
+}
+```
+
+- **Which Python, which app.** Name the virtualenv's Python by its absolute path
+  (`.venv\Scripts\python.exe` on Windows): a client may start the adapter from any directory,
+  and that Python is the one the app is installed in. The adapter asks the app at
+  `http://127.0.0.1:8741`, or at the port `PORT` sets in the environment or in `.env` in the
+  directory it starts in. For another port, add `"--url", "http://127.0.0.1:<port>"` to `args`:
+  the bare address, never the one with the token.
+- **What the agent can do.** The 17 tools in [Tools](#tools): open a case, correct or confirm
+  its claims, run the checks or `investigate`, draft the verdict, the recruiter reply and the
+  1930 summary, and read cases and the search budget. Each call is one `POST /api/invoke`
+  without the person's session, so the app counts it as the agent's. An open page shows it in
+  its activity log within about two seconds, with a note beside the log naming the tool. Claims
+  the agent confirmed are marked as the agent's, and a case it changed after the person read it
+  needs reading again before it can be published.
+- **What it can't.** Publish or retract a verdict, record an outcome, or run checks past a
+  decisive result. Those four aren't in its tool list; a call to one comes back as a tool error
+  carrying the app's refusal, and the refusal is in the activity log as the agent's. The
+  adapter never names an actor, holds no session, keeps no state and uses no proxy.
+- **When the app isn't running**, a tool call says so: `Offer Checkpost is not running at
+  http://127.0.0.1:8741: start it with python -m offer_checkpost serve`.
+
+Its tests start it as a subprocess and drive it over its pipes with a scripted JSON-RPC client,
+against the real server.
 
 ## What it can't check
 
@@ -288,12 +416,14 @@ browser is ever downloaded.
   details are never sent.
 - Pasted messages and the Offer Board stay in memory on your machine and are gone when the
   server stops. The board is a single-machine log; "Copy for WhatsApp" and the downloaded page
-  are how a verdict reaches anyone else.
+  are how a verdict reaches anyone else. Live search results are cached on disk under
+  `.cache/serpapi/` for 24 hours; the folder is git-ignored.
 - All sample offers are fictional. Their contacts use reserved `.example` domains and masked
   phone numbers.
-- The recorded SerpApi responses used by replay mode are trimmed to the fields listed above,
-  with reviewer identities and personal profiles removed. They are third-party search content,
-  not covered by this repository's licence, and are included only for replay and tests.
+- Responses recorded for replay mode are trimmed to the fields listed above, with reviewer
+  identities and personal profiles removed, before they are written. Once in the repository,
+  they are third-party search content, not covered by this repository's licence, and included
+  only for replay and tests.
 
 ## License
 
