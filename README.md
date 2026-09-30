@@ -18,7 +18,8 @@ in the **Knowledge & Public Interest** track.
 
 **Status: the investigator, the local web app and its MCP adapter are built and tested, and
 the three demo samples' SerpApi responses were recorded with a real key on 29 September 2026;
-the demo video is next.** `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
+the demo video was filmed on live SerpApi the same day, with one replay cutaway labelled as
+such.** `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
 `python -m offer_checkpost mcp` serves its agent tools to an MCP client
 ([Use it from an MCP client](#use-it-from-an-mcp-client)), and
 `python -m offer_checkpost investigate <file>` runs an offer through the same path from the
@@ -50,8 +51,10 @@ key ([The three demo samples](#the-three-demo-samples)).
   `src/offer_checkpost/checks.py`).
 - **It never certifies an offer.** On the page, the board and the WhatsApp text, its best band
   reads "No contradictions found" (the tools and the command line name it
-  `consistent_with_genuine`), never "verified", "safe" or a 0-100 score, and the board refuses
-  a label that says more than the checks found. A verdict posted for others is a person's click, and the post is a snapshot of
+  `consistent_with_genuine`), never "verified", "safe" or a 0-100 score. The board refuses a
+  label the checks contradict: "No contradictions found" on any other band, and a red-flag
+  label on that best band. On an unverified draft a person may still choose a red-flag label,
+  which is their call, and the post keeps the draft band beside it. A verdict posted for others is a person's click, and the post is a snapshot of
   the claims and evidence they read, which nothing done to the case afterwards rewrites
   (`label_misfit` and `post` in `src/offer_checkpost/drafts.py`, `publish_verdict` in
   `src/offer_checkpost/verbs.py`).
@@ -226,8 +229,8 @@ as the agent's.
   the only runtime dependency
 - Standard-library HTTP server; plain HTML, CSS and JavaScript UI with no build step; a
   standard-library MCP adapter over stdio (no MCP SDK)
-- pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and,
-  next, the demo recording
+- pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and
+  the demo recording
 - Three search providers behind one interface: **live** (your SerpApi key, with a local
   cache), **replay** (serves the demo samples' SerpApi responses, recorded with a real key on
   29 September 2026, trimmed and labelled with their date, and needs no key), and **fake**
@@ -363,7 +366,10 @@ their own notice, and replay serves them with no key.
   it never asks for recruitment fees. High risk after 2 searches, with 4 saved. **Run
   remaining checks** spends those 4: hcltech.com neither clears nor names the look-alike, no
   such listing by HCLTech turns up, HCLTech is on Maps in Noida, and its reviews there,
-  filtered on "fee", come back empty. It stays high risk.
+  filtered on "fee", come back empty. It stays high risk. That is what replay serves, from the
+  responses recorded on 29 September. A live search is not the same twice: when the demo video
+  was filmed later that day, the `site:` search returned no HCLTech notice, so nothing was
+  decisive, all 6 searches were spent and the case stayed unverified, as the video shows.
 - **Sample B** (`samples/offers/b.txt`) is a real opening at **Siemens**, an Application
   Support Engineer role in Bengaluru, open when it was recorded. The message links only to the
   listing on Siemens's own careers site, and names no pay and no recruiter's name or address.
@@ -427,6 +433,28 @@ For a client that reads an `mcpServers` JSON file:
 
 Its tests start it as a subprocess and drive it over its pipes with a scripted JSON-RPC client,
 against the real server.
+
+### Recording the demo video
+
+`demo/record_demo.py` records the app running on 127.0.0.1 in Google Chrome, headless, with
+Playwright, then renders the mp4 with ffmpeg and a narration spoken by macOS `say`:
+
+```bash
+make demo-record                         # live SerpApi (at most 18 searches), then out/offer-checkpost-demo.mp4
+make demo-record DEMO_PROVIDER=replay    # the recorded responses: no search spent
+make demo-render                         # the saved capture again, after a narration change: no search
+.venv/bin/python -m demo.record_demo capture --provider live --workdir out/demo-capture
+.venv/bin/python -m demo.record_demo capture --provider replay --part cutaway --workdir out/demo-capture/cutaway
+.venv/bin/python -m demo.record_demo render --workdir out/demo-capture --out out/offer-checkpost-demo.mp4
+```
+
+A live take also records a short replay cutaway of sample A on the recorded responses, which
+hold HCLTech's notice, and the render splices it in under its own label. The render refuses a
+capture whose page didn't show what a beat's narration says. It also refuses narration
+rewritten since the capture that names text the capture never checked, unless
+`--allow-unchecked` (`make demo-render ALLOW_UNCHECKED=1`) says a person has looked at the
+footage; `render.json` lists those claims. [`docs/video-script.md`](docs/video-script.md) is
+the shot list.
 
 ## What it can't check
 

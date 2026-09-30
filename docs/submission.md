@@ -136,12 +136,14 @@ official domain there is no site: search and the office is checked first; with t
 the official domain and no fee asked, the fraud-notice search is skipped; with no Maps place
 there is no reviews query. The planner stops when the evidence is decisive, and the trace
 shows every engine call, why it ran, whether it came from the cache, and the searches saved.
-In the recorded demo, the HCLTech impersonation stops at 2 of its 6 searches (4 more if a
-person asks), the unknown firm also at 2 (2 more if asked), and the real Siemens opening takes 4. With a 6-search cap and a 20-search
-reserve, the free plan's 250 searches cover at least 38 checks a month, and the same bulk-sent
-message forwarded again is answered at 0 searches. Live results are cached locally for 24
-hours. Responses recorded for keyless replay keep only these fields, without keys, people's
-profiles, videos or the headlines the app never reads, and with phones and emails masked.
+In replay, HCLTech stops at 2 of its 6 searches (4 more if a person asks), the unknown firm
+at 2 (2 more if asked), and Siemens takes 4. In the live video, the site: search found no
+HCLTech notice that day: 6 searches, unverified; a labelled replay shows the 2-search path.
+With a 6-search cap and a
+20-search reserve, the free plan's 250 searches cover at least 38 checks a month, and the same
+bulk-sent message forwarded again is answered at 0 searches. Responses recorded for keyless
+replay keep only these fields, without keys, people's profiles, videos or the headlines the
+app never reads, and with phones and emails masked.
 
 WHERE TO LOOK, by judging criterion (README sections and repository files):
 - Idea strength: the opening lines and "The problem".
@@ -157,8 +159,8 @@ WHERE TO LOOK, by judging criterion (README sections and repository files):
 Claude Code (Anthropic) did most of the hands-on work under my direction: researching the
 rules against the concept, planning, and writing the code, tests and documentation, including
 the Playwright tests that drive the app in Chrome. I set the constraints and reviewed the
-result. No AI model runs inside the app: every verdict comes from deterministic rules over
-SerpApi results.
+result. The demo video's narration is macOS text-to-speech (the built-in say command). No AI
+model runs inside the app: every verdict comes from deterministic rules over SerpApi results.
 
 ## Additional team members
 
