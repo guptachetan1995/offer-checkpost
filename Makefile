@@ -1,6 +1,7 @@
 # Every target runs from a fresh clone. pyenv picks the interpreter from .python-version;
-# without pyenv, pass PY=/path/to/python3.11 or newer.
-PY ?= python3.13
+# without pyenv, PY defaults to the first of python3.13, python3.12 and python3.11 on the PATH;
+# pass PY=/path/to/python3.11 or newer to choose another.
+PY ?= $(shell command -v python3.13 || command -v python3.12 || command -v python3.11 || echo python3.13)
 VENV := .venv
 PIP := $(VENV)/bin/pip --disable-pip-version-check
 PYTHON := $(VENV)/bin/python
@@ -34,8 +35,10 @@ fmt: setup
 
 # Spends live SerpApi searches with the key in .env, at most 24 for these three samples, and
 # refuses before any search when this month's usage would pass 40: MAX_TOTAL=n moves that cap.
+# NO_CACHE makes SerpApi run each search fresh: its own one-hour cache would otherwise answer a
+# repeat, uncounted, and the recording would not be the search of that moment.
 record-fixtures: setup
-	$(PYTHON) -m offer_checkpost record a=samples/offers/a.txt b=samples/offers/b.txt \
+	OFFER_CHECKPOST_NO_CACHE=1 $(PYTHON) -m offer_checkpost record a=samples/offers/a.txt b=samples/offers/b.txt \
 		c=samples/offers/c.txt $(if $(MAX_TOTAL),--max-total $(MAX_TOTAL))
 
 # A real screen recording of the app on 127.0.0.1 (demo/record_demo.py), captured into

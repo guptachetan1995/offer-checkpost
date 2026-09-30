@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from offer_checkpost import drafts, planner
+from offer_checkpost.checks import find_fraud_notice_params
 from offer_checkpost.invoke import invoke
 from offer_checkpost.providers import (
     FAKE_ACCOUNT,
@@ -533,6 +534,77 @@ def test_a_failed_search_is_an_error_on_the_log_and_a_failed_line_on_the_trace()
     assert (out["ok"], out["outcome"]) == (False, "error")
     assert out["error"].startswith("no fake fixture")
     assert store.cases[case_id]["trace"][-1]["action"] == "failed"
+
+
+# ---- a fraud-notice search that says nothing -------------------------------------------------
+
+
+def offdomain_store(broad):
+    """Sample A's routes, with the fraud-notice search answered by pages of other sites, and
+    its broad retry answered by ``broad``."""
+    routes = [(r["params"], r["fixture"]) for r in ROUTES]
+    routes += [
+        (find_fraud_notice_params("brand.example", "Noida"), "google/fraud_notice_offdomain.json"),
+        (find_fraud_notice_params("brand.example", "Noida", "broad"), broad),
+    ]
+    return Store(FakeSearchProvider(routes, clock=lambda: NOW.timestamp()), clock=lambda: NOW)
+
+
+def test_drafts_say_the_notice_search_was_inconclusive_and_never_that_no_notice_exists():
+    store = offdomain_store("google/fraud_notice_offdomain.json")
+    case_id, result = agent_investigates(store, "a")
+    assert [x["step"] for x in result["trace"] if x["tool"] == "find_fraud_notice"] == [2, 3]
+    args = {"case_id": case_id}
+
+    inconclusive = (
+        "Inconclusive: the fraud-notice search (steps 2, 3, find_fraud_notice on google) "
+        "returned no page from brand.example, so it says nothing about whether brand.example "
+        "publishes a recruitment-fraud notice."
+    )
+    verdict = call(store, "draft_verdict", args)["summary"]
+    report = call(store, "draft_cybercrime_report", args)["text"]
+    for text in (verdict, report):
+        assert inconclusive in text
+        assert "no recruitment-fraud notice" not in text
+    assert verdict.index(inconclusive) < verdict.index("Searches: ")
+    assert report.index(inconclusive) < report.index("Searches: ")
+    assert "Inconclusive" not in call(store, "draft_recruiter_reply", args)["text"]
+
+
+def test_a_retry_that_finds_the_notice_leaves_nothing_inconclusive_in_the_drafts():
+    store = offdomain_store("google/fraud_notice_fee.json")
+    case_id, _ = agent_investigates(store, "a")
+    args = {"case_id": case_id}
+
+    verdict = call(store, "draft_verdict", args)["summary"]
+    assert "Inconclusive" not in verdict
+    assert "(step 3, find_fraud_notice on google)" in verdict
+    assert "Inconclusive" not in call(store, "draft_cybercrime_report", args)["text"]
+
+
+def test_the_agent_can_ask_for_the_broad_wording_and_only_the_two_wordings():
+    store = offdomain_store("google/fraud_notice_fee.json")
+    case_id = call(store, "open_case", {"text": sample_text("a")})["id"]
+    call(store, "update_claims", {"case_id": case_id, "confirm": True})
+    call(store, "lookup_official_site", {"case_id": case_id})
+
+    step = call(store, "find_fraud_notice", {"case_id": case_id, "wording": "broad"})["step"]
+    assert step["params"] == find_fraud_notice_params("brand.example", "Noida", "broad")
+    assert step["args"] == {"case_id": case_id, "wording": "broad"}
+    assert "wording" in refusal(
+        store, "find_fraud_notice", {"case_id": case_id, "wording": "thorough"}
+    )
+
+
+def test_the_tool_says_what_an_inconclusive_search_is_and_is_not():
+    [tool] = [t for t in listing() if t["name"] == "find_fraud_notice"]
+    description = tool["description"]
+    assert tool["inputSchema"]["properties"]["wording"]["enum"] == ["specific", "broad"]
+    assert tool["inputSchema"]["required"] == ["case_id"]
+    assert "INCONCLUSIVE" in description and "inconclusive: true" in description
+    assert "not evidence that the employer has no notice" in description
+    assert "Does NOT" in description
+    assert "one more search" in description and "second inconclusive" in description
 
 
 # ---- publishing: the case a person read, and nothing after ----------------------------------

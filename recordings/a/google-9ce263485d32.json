@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-09-29T15:06:21+05:30",
+  "recordedAt": "2026-09-30T13:06:18+05:30",
   "engine": "google",
   "params": {
     "engine": "google",
@@ -10,5 +10,58 @@
     "location": "Noida, India",
     "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
   },
-  "response": {}
+  "response": {
+    "organic_results": [
+      {
+        "title": "AI and the Future of Work: Preparing an AI-First Workforce",
+        "link": "https://www.hcltech.com/knowledge-library/ai-and-future-work-preparing-ai-first-workforce",
+        "snippet": "An AI-first workforce is one in which employees routinely use AI for decisions, knowledge work and workflow execution while people retain ..."
+      },
+      {
+        "title": "4 technologies fueling digital engineering",
+        "link": "https://www.hcltech.com/trends-and-insights/4-technologies-driving-digital-engineering-explosion",
+        "snippet": "The pioneering technologies that are driving the digital engineering explosion and how it is transforming the way organizations work."
+      },
+      {
+        "title": "Modernize Oracle on Google Cloud with HCLTech",
+        "link": "https://www.hcltech.com/blogs/unleash-the-power-of-oracle-on-google-cloud-a-modernization-journey-with-hcltech",
+        "snippet": "... Careers ... These examples demonstrate HCLTech's capabilities in delivering tangible business value through Oracle database modernization."
+      },
+      {
+        "title": "Annual Report",
+        "link": "https://www.hcltech.com/sites/default/files/document/open/annual-report/2026-09/annual-report-2025-26.pdf",
+        "snippet": "HCLTech's Integrated Annual Report for FY26 provides a comprehensive overview of the company's performance over the past year."
+      },
+      {
+        "title": "What is AI? Types, Benefits, Use Cases and Future Trends",
+        "link": "https://www.hcltech.com/de-de/knowledge-library/what-is-artificial-intelligence",
+        "snippet": "HCLTech and Microsoft partner to lead AI-first enterprise transformation, uniting Microsoft platforms with HCLTech engineering to deliver secure, production- ..."
+      },
+      {
+        "title": "ISG Provider Lens™ Manufacturing Supply Chain Digital ...",
+        "link": "https://www.hcltech.com/analyst-reports/hcl-technologies-positioned-leader-isg-provider-lenstm-manufacturing-supply",
+        "snippet": "ISG Provider Lens™ has declared HCLTech as a Leader in their recent report for Manufacturing Supply Chain Digital Transformation Services, 2021."
+      },
+      {
+        "title": "cambridge university students' union case study on",
+        "link": "https://www.hcltech.com/sites/default/files/documents/resources/case-study/files/iship_case_study.pdf",
+        "snippet": "HCL Technologies is one of the select few organisations profiled in the CUSU Strategies for Success: Employers, education, excellence and careers publication."
+      },
+      {
+        "title": "Semiconductor Solutions for Automotive | HCLTech US",
+        "link": "https://www.hcltech.com/en-us/semiconductor-solutions-for-automotive",
+        "snippet": "Supercharge mobility with hcltech's semiconductor solutions for automotive, empowering oems and tier-1s with sustainable, intelligent engineering expertise."
+      },
+      {
+        "title": "Artificial neural networks for non linear classification ...",
+        "link": "https://www.hcltech.com/en-us/white-papers/artificial-neural-networks-non-linear-classification-xor",
+        "snippet": "Learn how artificial neural networks solve non linear classification problems using the XOR case study, hidden layers and activation functions."
+      },
+      {
+        "title": "Mixed reality: The new MR in the healthcare sector",
+        "link": "https://www.hcltech.com/en-us/trends-and-insights/mixed-reality-new-mr-healthcare",
+        "snippet": "Trainees perform up to 70% better on workplace tests and on-job tasks. HCLTech also joined the XR Startup Program — an initiative between Meta ..."
+      }
+    ]
+  }
 }

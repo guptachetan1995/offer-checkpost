@@ -29,6 +29,7 @@ from typing import Any
 
 from offer_checkpost.checks import search_name
 from offer_checkpost.domains import registrable_domain
+from offer_checkpost.planner import inconclusive_notice_search
 from offer_checkpost.rules import _STRENGTH, RULES, TEXT_SOURCE, Decision, Signal, _sift, decide
 
 Case = dict[str, Any]
@@ -110,19 +111,25 @@ def citations(case: Case, signal_ids: Iterable[str]) -> list[dict[str, Any]]:
     return cards
 
 
-def _source(evidence: dict[str, Any]) -> str:
+# Sender rules quote the result the official domain was read from, which says nothing about the
+# sender: the line says so instead of presenting it as the sender's evidence.
+_ANCHORED_RULES = frozenset({"sender_lookalike", "sender_free_mail", "sender_official"})
+
+
+def _source(evidence: dict[str, Any], label: str = "Source") -> str:
     parts = [f'"{evidence[key]}"' for key in ("title", "snippet") if evidence[key]]
     parts.append(evidence["link"] or f'{evidence["engine"]} search "{evidence["query"]}"')
     if evidence["date"]:
         parts.append(f"dated {evidence['date']}")
-    return f"Source: {' · '.join(parts)} (retrieved {_day(evidence['retrievedAt'])})"
+    return f"{label}: {' · '.join(parts)} (retrieved {_day(evidence['retrievedAt'])})"
 
 
 def _line(card: dict[str, Any]) -> str:
     if card["fromText"]:
         return f"{card['label']} (the message): {card['finding']}"
     where = f"step {card['step']}, {card['tool']} on {card['evidence']['engine']}"
-    return f"{card['label']} ({where}): {card['finding']}. {_source(card['evidence'])}"
+    label = "Official domain taken from" if card["rule"] in _ANCHORED_RULES else "Source"
+    return f"{card['label']} ({where}): {card['finding']}. {_source(card['evidence'], label)}"
 
 
 def _plain_line(card: dict[str, Any]) -> str:
@@ -207,6 +214,22 @@ def _searches(case: Case) -> str:
     return line + STOPPED[stopped].format(**budget) + "."
 
 
+def _inconclusive(case: Case) -> list[str]:
+    """One line when the fraud-notice search came back with no page from the official domain:
+    no signal marks it, and a draft that left it out would read as if no notice exists."""
+    found = inconclusive_notice_search(case)
+    if found is None:
+        return []
+    steps = [str(n) for n in found["steps"]]
+    numbered = f"step {steps[0]}" if len(steps) == 1 else f"steps {', '.join(steps)}"
+    official = found["official"]
+    return [
+        f"Inconclusive: the fraud-notice search ({numbered}, find_fraud_notice on google) "
+        f"returned no page from {official}, so it says nothing about whether {official} "
+        "publishes a recruitment-fraud notice."
+    ]
+
+
 def _day(iso: str) -> str:
     d = datetime.fromisoformat(iso).astimezone(_IST)
     return f"{d.day} {d:%b %Y}"
@@ -224,7 +247,8 @@ def verdict(case: Case, *, drafted_at: str) -> dict[str, Any]:
     """``draftVerdict``: the band from the decision table and a summary that leads with the
     table's own one-line summary (so a text-only case leads with its text red flags), then
     one line per signal behind the band, then any other counted signal, then each signal the
-    table set aside and why, then the searches spent and saved."""
+    table set aside and why, then a fraud-notice search that came back with no page from the
+    official domain (inconclusive, not a finding), then the searches spent and saved."""
     decision = _decision(case)
     counted, set_aside = _counted(case)
     cited = list(decision.evidence_ids)
@@ -235,6 +259,7 @@ def verdict(case: Case, *, drafted_at: str) -> dict[str, Any]:
     if others:
         lines += ["Also found:"] + [f"- {_line(c)}" for c in citations(case, others)]
     lines += [f"Not counted: {reason}." for reason in set_aside]
+    lines += _inconclusive(case)
     lines.append(_searches(case))
     return {
         "band": decision.band,
@@ -449,6 +474,7 @@ def cybercrime_report(case: Case, *, drafted_at: str) -> dict[str, Any]:
     if green:
         lines += ["Found consistent with the offer:", *[f"- {_line(c)}" for c in green]]
     lines += [
+        *_inconclusive(case),
         _searches(case),
         f"Drafted verdict: {_BAND_WORDS[_decision(case).band]}. Software drafted this from the "
         "evidence above; it is not a finding by any authority.",

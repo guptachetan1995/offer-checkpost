@@ -8,7 +8,7 @@ tests fail.
 ## The three demo samples
 
 The demo runs these three, and replay mode answers them with no key: their SerpApi responses
-were recorded with a real key on 29 September 2026 and are in `recordings/`. The messages are
+were recorded with a real key on 29 and 30 September 2026 and are in `recordings/`. The messages are
 fictional. Two of the employers are real, on purpose.
 
 | File | What it is |
@@ -21,8 +21,8 @@ fictional. Two of the employers are real, on purpose.
 
 - **HCLTech, in Sample A, is the victim, not the sender.** Scam offers borrow the names of large
   employers, and the strongest evidence against one is the employer's own words. HCLTech's own
-  site carries a recruitment-fraud warning that Google indexes, "we never ask for recruitment
-  fees", so the check quotes the employer contradicting the message, from the employer's own
+  site carries a recruitment-fraud warning that Google indexes, "will never ask for any payment
+  of money", so the check quotes the employer contradicting the message, from the employer's own
   domain, with the date SerpApi returned it. The message, its sender and the sender's
   `.example` domain are invented; nothing in it comes from HCLTech.
 - **Siemens, in Sample B, is a real opening**, because "No contradictions found" only means

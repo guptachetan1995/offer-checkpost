@@ -702,6 +702,7 @@ blockquote {
 }
 .note { font-size: 0.92rem; }
 .note.failed { color: var(--red); }
+.note.inconclusive strong { color: var(--amber); }
 .fired { display: flex; flex-wrap: wrap; gap: 6px; }
 .sig {
   font-size: 0.78rem;

@@ -15,13 +15,15 @@ the previous 24 hours comes from the local cache, dated when SerpApi returned it
   Dailymotion), whose descriptions name the speakers; and every news headline without both a
   fraud term and a job word, which the app never reads. No reviewer's name or profile is kept,
   phone numbers and email addresses are masked, and anything key-shaped is removed.
-- **How these files were fetched.** On 29 September 2026 the app's own live provider ran each
-  search, a few at a time, into its local cache, and `record` then wrote every file from that
-  cache without a new search. The `site:` search for HCLTech's fraud notice took 66 s, longer
-  than the app then waited for SerpApi, so it was sent with a longer client timeout, and with
-  `no_cache`. Later that day `record` ran Sample A's remaining checks live itself, taking its
-  first two searches from the local cache. No kept title, snippet or headline in these files
-  names a person.
+- **How these files were fetched.** On 29 September 2026 the app's own live provider ran the
+  searches of Samples B and C, a few at a time, into its local cache, and `record` then wrote
+  every file from that cache without a new search. On 30 September 2026 `record` ran Sample A
+  live itself: all six of its searches, through the app's provider, the two of the first pass and
+  the four remaining checks. The Account API's count did not move for them (65 used before and
+  after, and still 65 when the film takes began), so SerpApi's own one-hour cache probably
+  answered them: the fraud-notice response is identical to one fetched for the same search
+  nine minutes earlier. Each file is dated when the app received it. No kept title, snippet or
+  headline in these files names a person.
 - **Dated.** `recordedAt` is when SerpApi returned the response, in IST. Search results change:
   a recording shows what a search found on that date, not today.
 - **Why it is here.** Only so the app can replay the demo without a SerpApi key (replay mode,

@@ -1,0 +1,10 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional.",
+  "organic_results": [
+    {
+      "title": "Recruitment Fraud Alert | Contoso",
+      "link": "https://www.contoso.example/recruitment-fraud-alert",
+      "snippet": "Beware of fraudsters impersonating Contoso recruiters. Verify every offer on our careers site before you respond."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-09-29T13:27:41+05:30",
+  "recordedAt": "2026-09-30T13:06:13+05:30",
   "engine": "google",
   "params": {
     "engine": "google",
@@ -16,11 +16,6 @@
         "title": "HCLTech Insight: GenAI- powered Manufacturing Solution",
         "link": "https://www.hcltech.com/en-us/hcltech-insight",
         "snippet": "HCLTech Insight offers GenAI-powered dashboards and a conversational assistant to empower factory line workers to respond swiftly to defects in real-time,"
-      },
-      {
-        "title": "Transform your multicloud network with HCLTech",
-        "link": "https://www.hcltech.com/en-us/networks/transform-your-multicloud-network-hcltech",
-        "snippet": "Unlock agility and performance with HCLTech's multicloud network solutions built for modern enterprises. Explore future-ready connectivity now!"
       },
       {
         "title": "Cloud transformation: Merck's proven modernization factory ...",
@@ -43,9 +38,14 @@
         "snippet": "HCLTech, explore how the AI economy is becoming physical as compute, networks and orchestration move closer to the edge and into devices."
       },
       {
-        "title": "HCLTech Videos",
-        "link": "https://www.hcltech.com/en-us/videos?page=1",
-        "snippet": "HCLTech enables AI-first, immersive and secure learning experiences while modernizing education and publishing ecosystems at scale."
+        "title": "HCLTech and Cisco's strategic partnership",
+        "link": "https://www.hcltech.com/en-us/videos/hcltech-and-ciscos-strategic-partnership",
+        "snippet": "Accelerating AI-led transformation for growing businesses with $500M to $5B in annual revenue. HCLTech enabling global flexibility and rapid ..."
+      },
+      {
+        "title": "HCL Technologies Limited Price: Quote, Forecast, Charts & ...",
+        "link": "https://www.perplexity.ai/finance/HCLTECH.NS?ref=repleteequities.com",
+        "snippet": "HCL Technologies shares rebounded, closing up 1.16% at ₹1258 as Indian IT stocks staged a bounce after a two-day slide tied to broader market volatility from ..."
       }
     ]
   }

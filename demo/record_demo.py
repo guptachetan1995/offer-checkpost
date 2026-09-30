@@ -5,14 +5,17 @@
     python -m demo.record_demo render [--workdir DIR] [--out FILE] [--allow-unchecked]
     python -m demo.record_demo all --provider live|replay [--workdir DIR] [--out FILE]
 
-``capture`` synthesizes each beat's narration with macOS ``say`` (the default system voice)
-and measures it, starts ``python -m offer_checkpost serve`` on a free port, opens the
-single-use address it prints in Google Chrome, headless, at 1280x720 with Playwright's
-``record_video_dir``, and plays the beats in ``demo.beats`` as a person's clicks, holding each
-on screen at least as long as its narration will last in the video. It injects each beat's
-caption into the page, and writes ``capture.webm`` and ``events.json`` (beat starts, every
-interval the page waited on searches, the call log, the Account API's counts before and after,
-what the page showed against each beat's ``expects``) into the work directory. ``live`` runs
+``capture`` synthesizes each sentence of each beat's narration with macOS ``say`` (the default
+system voice) and measures it, starts ``python -m offer_checkpost serve`` on a free port, opens
+the single-use address it prints in Google Chrome, headless, at 1280x720 with Playwright's
+``record_video_dir``, and plays the beats in ``demo.beats`` as a person's clicks. Each sentence
+starts as the page reaches what it says, after the one before it has been spoken, and each beat
+is held on screen until its last sentence has been. A caption goes up at the moment of the
+on-screen change it describes, and comes down when the next sentence starts. It writes
+``capture.webm`` and ``events.json`` (beat starts, the second each sentence was cued and each
+caption shown, every interval the page waited on searches, the call log, the Account API's
+counts before and after, what sample A's live search found, what the page showed against each
+beat's ``expects``) into the work directory. ``live`` runs
 the app on live SerpApi with ``OFFER_CHECKPOST_NO_CACHE=1``, so every search is real and
 counted; before the first search it reads the searches used this month from the page's header
 (the free Account API) and refuses when the worst case would pass ``--max-usage``. ``replay``
@@ -21,12 +24,16 @@ stops part-way leaves ``events.aborted.json`` (the searches it had spent) and
 ``capture.partial.webm``.
 
 ``--part cutaway`` records the replay cutaway instead of the film: sample A again on the
-recorded responses, which hold HCLTech's fraud notice. ``all --provider live`` captures both,
-the cutaway into ``<workdir>/cutaway``; ``render`` splices it in after the beat named by
-``demo.beats.CUTAWAY_AFTER`` whenever that folder holds a capture.
+recorded responses, which hold HCLTech's fraud notice. Only a live take whose sample A search
+found no notice (``outcome`` ``unverified`` or ``unverified_retried`` in ``events.json``) needs
+it: ``all --provider live``
+captures it, into ``<workdir>/cutaway``, only then, and ``render`` splices it in, after the beat
+named by ``demo.beats.CUTAWAY_AFTER``, only for such a take.
 
 ``render`` turns the capture into the mp4 without the browser or the app: it re-synthesizes any
-narration whose words changed, lays out the timeline (``demo.timeline``), draws each sped-up
+narration whose words changed, lays out the timeline (``demo.timeline``: it leaves out the
+stretches where the screen did not change and nobody was speaking, as ffmpeg's ``freezedetect``
+finds them, and lists them in ``render.json``), draws each sped-up
 wait's label as an image, and has ffmpeg cut, speed up, overlay and encode H.264 1280x720 at
 30 fps with the AAC narration, faststart. It writes ``render.json`` beside the mp4 and fails
 when ffprobe finds the video 179 s or longer, without sound, or a frame count more than one
@@ -63,10 +70,13 @@ from demo import timeline
 from demo.beats import (
     CUTAWAY_AFTER,
     HACKATHON,
+    OUTCOMES,
     PARTS,
     RECORDED,
     REPO_URL,
+    SAMPLE_B,
     TRACK,
+    UNVERIFIED,
     Beat,
     beats,
     judge,
@@ -86,7 +96,12 @@ WORST_CASE = 3 * PER_CASE
 DEFAULT_MAX_USAGE = 54
 SEARCH_TIMEOUT = 600
 SETTLE = 0.4
+# A smooth scroll to a finding takes about this long, and its caption goes up once most of it
+# is done.
+SCROLL = 0.9
+CAPTION_AFTER_SCROLL = 0.6
 NOTE = "Do not pay the fee."
+FORWARDED = (ENTRY / "samples" / "offers" / "a-forwarded.txt").read_text("utf-8")
 _URL = re.compile(r"(http://127\.0\.0\.1:\d+)/\?token=\S+")
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -111,22 +126,23 @@ html, body {{ margin: 0; background: transparent; }}
 # ---- narration ----------------------------------------------------------------------------
 
 
-def synthesize(plan_beats: Sequence[Beat], folder: Path) -> dict[str, dict[str, Any]]:
-    """Each narrated beat's clip, ``<key>.wav`` in ``folder``, spoken by ``say``; a clip whose
-    words haven't changed is reused. Returns ``{key: {"text", "seconds", "path"}}``."""
+def synthesize(plan_beats: Sequence[Beat], folder: Path) -> dict[str, list[dict[str, Any]]]:
+    """Each narrated sentence's clip, ``<hash of its words>.wav`` in ``folder``, spoken by
+    ``say``; a clip already there is reused. Returns ``{key: [{"text", "seconds", "path"}]}``,
+    each beat's sentences in order."""
     folder.mkdir(parents=True, exist_ok=True)
-    clips = {}
+    clips: dict[str, list[dict[str, Any]]] = {}
     for beat in plan_beats:
-        if not beat.narration:
-            continue
-        wav, words = folder / f"{beat.key}.wav", folder / f"{beat.key}.txt"
-        if not (wav.exists() and words.exists() and words.read_text("utf-8") == beat.narration):
-            aiff = folder / f"{beat.key}.aiff"
-            subprocess.run(["say", "-o", str(aiff), beat.narration], check=True)
-            ffmpeg("-i", str(aiff), "-ar", "48000", "-ac", "2", str(wav))
-            aiff.unlink()
-            words.write_text(beat.narration, "utf-8")
-        clips[beat.key] = {"text": beat.narration, "seconds": probe_seconds(wav), "path": wav}
+        for sentence in beat.narration:
+            wav = folder / f"{hashlib.sha1(sentence.encode()).hexdigest()[:12]}.wav"
+            if not wav.exists():
+                aiff = wav.with_suffix(".aiff")
+                subprocess.run(["say", "-o", str(aiff), sentence], check=True)
+                ffmpeg("-i", str(aiff), "-ar", "48000", "-ac", "2", str(wav))
+                aiff.unlink()
+            clips.setdefault(beat.key, []).append(
+                {"text": sentence, "seconds": probe_seconds(wav), "path": wav}
+            )
     return clips
 
 
@@ -257,31 +273,53 @@ def mcp_exchange(origin: str, cwd: Path, case_id: str) -> dict[str, Any]:
 
 
 class Take:
-    """One capture: the page, the clock the video runs on, and the events logged against it."""
+    """One capture: the page, the clock the video runs on, and the events logged against it.
+    ``variants`` is each ``(outcome of sample A, outcome of sample B)``'s beats and their
+    narration clips; the take paces itself by the ``decisive``, ``clean`` ones until ``decided``
+    and ``decided_b`` say what the live searches found."""
 
     def __init__(
         self,
         page: Any,
         app: App,
         workdir: Path,
-        plan_beats: Sequence[Beat],
-        narration: dict[str, dict[str, Any]],
+        variants: dict[tuple[str, str], tuple[Sequence[Beat], dict[str, list[dict[str, Any]]]]],
     ):
         self.page, self.app, self.workdir = page, app, workdir
-        self.beats = {b.key: b for b in plan_beats}
-        self.narration = narration
+        self.variants = variants
+        self.outcome, self.sample_b = "decisive", "clean"
+        self.beats: dict[str, Beat] = {}
+        self.narration: dict[str, list[dict[str, Any]]] = {}
+        self.decided(self.outcome)
         self.t0 = time.monotonic()
         self.marks: list[tuple[str, float]] = []
+        self.cues: dict[str, list[float]] = {}
         self.waits: list[timeline.Wait] = []
         self.expects: list[dict[str, Any]] = []
         self.checks: list[dict[str, Any]] = []
-        self.caption = ""
+        self.showing = ""
+        self.captions: list[dict[str, Any]] = []
         self.inflight = 0
         self.started = 0
         self.finished_at = 0.0
         page.on("request", self._request)
         page.on("requestfinished", self._settled)
         page.on("requestfailed", self._settled)
+
+    def decided(self, outcome: str) -> None:
+        """What sample A's live search found: the beats from here on say that."""
+        self.outcome = outcome
+        self._speak()
+
+    def decided_b(self, sample_b: str) -> None:
+        """What sample B's live searches found: the beats from here on say that."""
+        self.sample_b = sample_b
+        self._speak()
+
+    def _speak(self) -> None:
+        plan_beats, clips = self.variants[(self.outcome, self.sample_b)]
+        self.beats = {b.key: b for b in plan_beats}
+        self.narration = clips
 
     def now(self) -> float:
         return time.monotonic() - self.t0
@@ -308,17 +346,52 @@ class Take:
     def beat(self, key: str) -> Beat:
         beat = self.beats[key]
         self.marks.append((key, self.now()))
-        self.set_caption(beat.caption)
+        self.set_caption("")
         return beat
 
-    def hold(self) -> None:
-        """Holds the current beat until it lasts, in the video, as long as its narration."""
+    def elapsed(self) -> float:
+        """Video seconds since the current beat started."""
+        _, start = self.marks[-1]
+        return timeline.output_elapsed(start, self.now(), self.waits)
+
+    def say(self, i: int) -> None:
+        """Starts sentence ``i`` of the current beat: as soon as the page has reached what it
+        says, but not before the sentence before it, and the gap after it, are over. The
+        caption of the sentence before is taken down: the next one goes up when the page shows
+        what it describes."""
         key, start = self.marks[-1]
-        spoken = self.narration.get(key, {}).get("seconds", 0.0)
-        need = timeline.beat_minimum(spoken, self.beats[key].delay) if spoken else 1.5
-        shown = timeline.output_elapsed(start, self.now(), self.waits)
-        if need > shown:
-            self.pause(need - shown)
+        clips, heard = self.narration[key], self.cues.setdefault(key, [])
+        if i != len(heard):
+            raise Refused(f"{key}: sentence {i} was cued out of order")
+        earliest = timeline.NARRATION_LEAD
+        if heard:
+            before = timeline.output_elapsed(start, heard[-1], self.waits)
+            earliest = before + clips[i - 1]["seconds"] + timeline.CLIP_GAP
+        if earliest > self.elapsed():
+            self.pause(earliest - self.elapsed())
+        heard.append(self.now())
+        if i:
+            self.set_caption("")
+
+    def caption(self, i: int) -> None:
+        """Puts caption slot ``i`` of the current beat on screen, in place of any other: call it
+        the moment the page shows what the caption describes."""
+        key, _ = self.marks[-1]
+        text = self.beats[key].captions[i]
+        self.set_caption(text)
+        self.captions.append({"beat": key, "slot": i, "t": self.now(), "text": text})
+
+    def hold(self) -> None:
+        """Speaks any sentence not yet cued, then holds the beat until its last has been spoken
+        and the tail after it is over."""
+        key, start = self.marks[-1]
+        clips, heard = self.narration[key], self.cues.setdefault(key, [])
+        while len(heard) < len(clips):
+            self.say(len(heard))
+        last = timeline.output_elapsed(start, heard[-1], self.waits) + clips[-1]["seconds"]
+        need = last + timeline.NARRATION_TAIL
+        if need > self.elapsed():
+            self.pause(need - self.elapsed())
         self.check_expects(key)
 
     def check_expects(self, key: str) -> None:
@@ -336,35 +409,68 @@ class Take:
         return self.page.evaluate(f"(a) => window.__oc.{call}(...a)", list(args))
 
     def set_caption(self, text: str) -> None:
-        self.caption = text
+        self.showing = text
         self.js("caption", text)
 
-    def show(self, selector: str, dwell: float = 0.0) -> None:
+    def scrolled(self, dwell: float, slot: int | None) -> None:
+        """Waits out a scroll and ``dwell``. Caption ``slot``, if any, goes up once the page has
+        mostly reached what it describes, and stays for the rest of the wait."""
+        total = SCROLL + dwell
+        if slot is None:
+            self.pause(total)
+            return
+        self.pause(CAPTION_AFTER_SCROLL)
+        self.caption(slot)
+        self.pause(total - CAPTION_AFTER_SCROLL)
+
+    def clear(self) -> None:
+        """Takes down the caption before the page moves on: it described the screen that is
+        being scrolled away."""
+        if self.showing:
+            self.set_caption("")
+
+    def show(self, selector: str, dwell: float = 0.0, caption: int | None = None) -> None:
         self.page.wait_for_selector(selector)
+        self.clear()
         self.js("show", selector)
-        self.pause(0.9 + dwell)
+        self.scrolled(dwell, caption)
 
-    def center(self, selector: str, dwell: float = 0.0) -> None:
+    def center(self, selector: str, dwell: float = 0.0, caption: int | None = None) -> None:
         self.page.wait_for_selector(selector)
+        self.clear()
         self.js("center", selector)
-        self.pause(0.9 + dwell)
+        self.scrolled(dwell, caption)
 
-    def show_text(self, root: str, text: str, dwell: float = 0.0) -> None:
+    def show_text(
+        self, root: str, text: str, dwell: float = 0.0, caption: int | None = None
+    ) -> None:
+        self.clear()
         if not self.js("showText", root, text):
             print(f"record_demo: {root} has no {text!r} to show", file=sys.stderr)
-        self.pause(0.9 + dwell)
+        self.scrolled(dwell, caption)
 
-    def point(self, selector: str, dwell: float = 0.5) -> None:
+    def point(self, selector: str, dwell: float = 0.5, caption: int | None = None) -> None:
         self.page.wait_for_selector(selector)
         if not self.js("visible", selector):
+            self.clear()
             self.js("center", selector)
-            self.pause(0.9)
+            self.pause(SCROLL)
         self.js("point", selector)
+        if caption is not None:
+            self.caption(caption)
         self.pause(dwell)
 
     def click(self, selector: str, dwell: float = 0.6) -> None:
         self.point(selector)
         self.page.click(selector)
+        self.pause(dwell)
+
+    def ring(self, selector: str, dwell: float = 1.0, caption: int | None = None) -> None:
+        """Rings ``selector`` where it is, without scrolling: for the sticky header."""
+        self.page.wait_for_selector(selector)
+        self.js("point", selector)
+        if caption is not None:
+            self.caption(caption)
         self.pause(dwell)
 
     def searching(self, selector: str) -> None:
@@ -389,9 +495,10 @@ class Take:
 
     def goto(self, url: str) -> None:
         self.page.goto(url)
-        self.js("caption", self.caption)
+        self.js("caption", self.showing)
 
     def top(self) -> None:
+        self.clear()
         self.page.evaluate("window.scrollTo({ top: 0, behavior: 'smooth' })")
         self.pause(0.8)
 
@@ -399,6 +506,15 @@ class Take:
         self.click("#sample", 0.2)
         self.page.select_option("#sample", name)
         self.pause(1.2)
+        self.click("#open-case")
+        self.page.wait_for_selector("[data-focus=confirm-claims]")
+        return self.app.get("/api/state")["cases"][-1]["id"]
+
+    def paste(self, text: str) -> str:
+        """Pastes ``text`` into the offer box and opens the case; returns its id."""
+        self.point("#offer-text", 0.3)
+        self.page.fill("#offer-text", text)
+        self.pause(0.6)
         self.click("#open-case")
         self.page.wait_for_selector("[data-focus=confirm-claims]")
         return self.app.get("/api/state")["cases"][-1]["id"]
@@ -425,6 +541,70 @@ class Take:
         }
 
 
+def _case(app: App, case_id: str) -> dict[str, Any]:
+    return next(c for c in app.get("/api/state")["cases"] if c["id"] == case_id)
+
+
+def notice_found(app: App, case_id: str) -> bool:
+    """Whether case ``case_id``'s investigation stopped decisive on the employer's own fraud
+    notice contradicting the fee: what the ``decisive`` beats say."""
+    case = _case(app, case_id)
+    fired = any(
+        s["rule"] == "fee_contradicts_employer" and not s["stale"] and not s.get("superseded")
+        for s in case["signals"]
+    )
+    return fired and case["budget"]["stoppedBecause"] == "decisive"
+
+
+def notice_runs(app: App, case_id: str) -> list[dict[str, Any]]:
+    """The fraud-notice searches case ``case_id`` ran, in order: one, or two when the first
+    returned no page from the employer's domain and the planner retried."""
+    trace = _case(app, case_id)["trace"]
+    return [x for x in trace if x["tool"] == "find_fraud_notice" and x["action"] == "ran"]
+
+
+def notice_note(app: App, case_id: str) -> str:
+    """What the last fraud-notice search of case ``case_id`` found, as the trace shows it: an
+    inconclusive search (no page from the employer's domain) leads with its own label there,
+    so the page does not repeat the word."""
+    [*_, last] = [
+        x for x in _case(app, case_id)["trace"] if x["tool"] == "find_fraud_notice" and x["note"]
+    ]
+    return last["note"].removeprefix("inconclusive: ")
+
+
+def sample_a_outcome(app: App, case_id: str) -> str:
+    """What sample A's live investigation found, for the beats to say (``demo.beats.OUTCOMES``):
+    ``decisive`` when the notice was found by the first fraud-notice search, ``retried`` when by
+    the planner's second (the first returned no page from the domain), ``unverified`` and
+    ``unverified_retried`` when the checks ran to their end without it. A search that failed (a
+    timeout, the quota) is none of them, and stops the take: the forwarded copy after it could
+    not be answered from a check that never finished, and every search spent going on would be
+    wasted."""
+    retried = len(notice_runs(app, case_id)) > 1
+    if notice_found(app, case_id):
+        return "retried" if retried else "decisive"
+    why = _case(app, case_id)["budget"]["stoppedBecause"]
+    if why in ("budget", "done"):
+        return "unverified_retried" if retried else "unverified"
+    raise Refused(
+        f"sample A's investigation stopped on {why!r}, not on a finished check "
+        f"({len(app.get('/api/calls')['calls'])} searches logged); nothing more was searched"
+    )
+
+
+def sample_b_outcome(app: App, case_id: str) -> str:
+    """What sample B's live investigation ended on, for the beats to say (``demo.beats.SAMPLE_B``):
+    ``clean`` when nothing found contradicts the offer, ``unverified`` when the band did not
+    move. Any other band is not one the film has words for."""
+    bands = [x["band"] for x in _case(app, case_id)["trace"] if x.get("band")]
+    if bands[-1:] == ["consistent_with_genuine"]:
+        return "clean"
+    if bands[-1:] == ["unverified"]:
+        return "unverified"
+    raise Refused(f"sample B ended on band {bands[-1:]}, which the film has no words for")
+
+
 def play(take: Take, max_usage: int) -> dict[str, Any]:
     """The beats, as a person's clicks. Returns what the events log needs beyond the take."""
     page, app = take.page, take.app
@@ -446,86 +626,148 @@ def play(take: Take, max_usage: int) -> dict[str, Any]:
         print(f"record_demo: Account API before: {before['title']}")
 
     take.beat("intro")
-    take.point("#bind", 1.4)
-    take.point("#provider", 1.4)
-    if app.provider == "live":
-        take.point("#budget", 1.4)
-    else:
-        take.point("#replay", 1.4)
-    take.point(".strip", 1.2)
+    take.say(0)
+    take.ring("#provider", 0.9, caption=0)
+    take.ring("#budget" if app.provider == "live" else "#replay", 0.9)
+    take.ring(".tagline", 0.9)
+    take.say(1)
+    take.ring(".strip", 1.0, caption=1)
+    take.say(2)
+    take.ring(".lede", 1.0, caption=2)
+    take.say(3)
+    take.center("#board", 0.2, caption=3)
+    take.ring("#board", 1.0)
+    take.top()
     take.hold()
 
     take.beat("a-claims")
+    take.say(0)
     a = facts["case_a"] = take.open_sample("a")
-    take.point(".chips", 2.5)
-    take.confirm(1.0)
-    take.center(".claims .state.ok", 0.5)
+    take.point(".chips", 1.5)
+    take.say(1)
+    take.confirm(0.2)
+    take.say(2)
+    take.center(".claims .state.ok", 0.5, caption=0)
     take.hold()
 
     take.beat("a-investigate")
+    take.say(0)
     take.searching("[data-focus=investigate]")
-    take.show("#trace", 4.5)
-    take.show_text("#trace", "A fee was asked and step 1 named", 4.0)
-    take.show_text("#trace", "not spent", 2.5)
-    take.show("#evidence", 5.0)
+    outcome = sample_a_outcome(app, a) if app.provider == "live" else "decisive"
+    take.decided(outcome)
+    facts["outcome"] = take.outcome
+    print(f"record_demo: sample A's live search: {take.outcome}")
+    take.show("#trace", 0.6, caption=0)
+    take.say(1)
+    take.show_text("#trace", "A fee was asked and step 1 named", 1.0, caption=1)
+    found = outcome in ("decisive", "retried")
+    if outcome == "decisive":
+        take.show("#evidence", 2.0, caption=2)
+    elif outcome == "unverified":
+        take.show_text("#trace", notice_note(app, a), 1.0, caption=2)
+    else:
+        take.say(2)
+        take.show_text("#trace", "R3, inconclusive notice search", 1.0, caption=2)
+        if found:
+            take.show("#evidence", 2.0)
+        else:
+            take.show_text("#trace", notice_note(app, a), 1.0)
+    if outcome in ("decisive", "unverified"):
+        take.say(2)
+    take.show_text("#trace", "not spent" if found else "6 searches spent of 6", 1.0, caption=3)
     take.hold()
 
     take.beat("a-publish")
-    take.show("#publish-h", 0.5)
+    take.say(0)
+    take.show("#publish-h", 0.3, caption=0)
     take.click("#pub-label", 0.2)
     page.select_option("#pub-label", "likely_impersonation")
-    take.pause(0.8)
+    take.pause(0.5)
+    take.say(1)
     take.click("#pub-note", 0.2)
     page.type("#pub-note", NOTE, delay=45)
-    take.pause(0.4)
+    take.pause(0.3)
     take.click("#publish-btn")
     page.wait_for_selector(f"#post-{a}")
-    take.show("#board", 0.5)
-    take.point(f"[data-focus=wa-{a}]", 1.5)
+    take.show("#board", 0.4)
+    take.point(f"[data-focus=wa-{a}]", 1.0, caption=1)
+    take.hold()
+
+    take.beat("a-forwarded")
+    take.top()
+    take.say(0)
+    take.click("[data-focus=new-case]", 0.3)
+    facts["case_forwarded"] = take.paste(FORWARDED)
+    take.point(".case-meta", 0.8, caption=0)
+    take.confirm(0.3)
+    take.say(1)
+    take.searching("[data-focus=investigate]")
+    take.ring(".strip", 1.0, caption=1)
+    take.say(2)
+    take.show("#trace", 1.5, caption=2)
     take.hold()
 
     take.beat("c-investigate")
     take.top()
-    take.click("[data-focus=new-case]", 0.4)
+    take.say(0)
+    take.click("[data-focus=new-case]", 0.3)
     facts["case_c"] = take.open_sample("c")
-    take.point(".chips", 1.8)
+    take.point(".chips", 1.8, caption=0)
     take.confirm(0.5)
+    take.say(1)
     take.searching("[data-focus=investigate]")
-    take.show("#trace", 2.5)
-    take.show_text("#trace", "Office not on Maps", 3.0)
+    take.show("#trace", 1.5)
+    take.show_text("#trace", "Office not on Maps", 2.0, caption=1)
     take.hold()
 
     take.beat("c-remaining")
-    take.show("#remaining-h", 0.3)
+    take.show("#remaining-h", 0.3, caption=0)
+    take.say(0)
     take.searching("[data-focus=remaining]")
-    take.show_text("#trace", "No matching listing", 2.0)
-    take.show_text("#trace", "Pay far above comparable listings", 3.0)
+    take.say(1)
+    take.show_text("#trace", "No matching listing", 1.5, caption=1)
+    take.show_text("#trace", "Pay far above comparable listings", 1.5, caption=2)
+    take.say(2)
     take.show("#drafts-h", 0.3)
     take.click("[data-focus=draft-reply]", 0.3)
-    take.center("#draft-reply", 3.0)
+    take.center("#draft-reply", 2.0)
     take.hold()
 
     take.beat("b-investigate")
     take.top()
-    take.click("[data-focus=new-case]", 0.4)
+    take.say(0)
+    take.click("[data-focus=new-case]", 0.3)
     facts["case_b"] = take.open_sample("b")
-    take.pause(1.0)
+    take.pause(0.6)
     take.confirm(0.3)
+    take.say(1)
     take.searching("[data-focus=investigate]")
-    take.show_text("#trace", "No fee or sensitive documents were asked for", 2.5)
-    take.show_text("#trace", "Listing applies on the official domain", 2.0)
-    take.show_text("#trace", "Found: no news reports", 1.5)
+    sample_b = sample_b_outcome(app, facts["case_b"]) if app.provider == "live" else "clean"
+    take.decided_b(sample_b)
+    facts["sample_b"] = sample_b
+    print(f"record_demo: sample B's live searches: {sample_b}")
+    take.show_text("#trace", "No fee or sensitive documents were asked for", 1.0, caption=0)
+    take.say(2)
+    if sample_b == "clean":
+        take.show_text("#trace", "Listing applies on the official domain", 1.5)
+        take.show_text("#trace", "Found: no news reports", 1.0, caption=1)
+    else:
+        take.show_text("#trace", "no listing by Siemens for this role", 1.5)
+        take.show_text("#trace", "Office found on Maps", 1.0, caption=1)
+    take.say(3)
     take.top()
-    take.center("#verdict", 3.0)
+    take.center("#verdict", 2.0, caption=2)
     take.hold()
 
     take.beat("a-report")
     take.top()
+    take.say(0)
     take.click(f"[data-focus=case-{a}]", 0.3)
     page.wait_for_selector(f"#case-h:text('{a}'), .case-meta:has-text('{a}')")
     take.show("#drafts-h", 0.3)
     take.click("[data-focus=draft-report]", 0.3)
-    take.center("#draft-report", 3.5)
+    take.center("#draft-report", 2.5, caption=0)
+    take.say(1)
     take.show("#board", 0.3)
     take.point("#board a[download]", 0.3)
     with page.expect_download() as download:
@@ -536,15 +778,16 @@ def play(take: Take, max_usage: int) -> dict[str, Any]:
     take.checks.append({"what": "board download", "ok": board_ok, "file": saved.name})
     take.pause(0.6)
     take.goto(saved.as_uri())
-    take.pause(3.5)
+    take.pause(2.5)
     page.go_back()
     page.wait_for_selector("#bind:not(:text('…'))")
-    take.js("caption", take.caption)
+    take.js("caption", take.showing)
     # A reload opens on the newest case; the person goes back to the one they were on.
     take.click(f"[data-focus=case-{a}]", 0.3)
     take.hold()
 
     take.beat("mcp-refused")
+    take.say(0)
     take.show("#activity-h", 0.3)
     shown = page.locator("#log .log-row").count()
     mcp = facts["mcp"] = mcp_exchange(app.origin, take.workdir, a)
@@ -575,6 +818,8 @@ def play(take: Take, max_usage: int) -> dict[str, Any]:
             ],
         ],
     )
+    take.caption(0)
+    take.say(1)
     # The page reads the agent's call on its idle poll, every 2 s; the app's CSP rules out
     # wait_for_function, which evaluates a string.
     deadline = time.monotonic() + 10
@@ -582,15 +827,16 @@ def play(take: Take, max_usage: int) -> dict[str, Any]:
         if time.monotonic() > deadline:
             raise Refused("the MCP client's call never showed in the page's activity log")
         take.pause(0.1)
-    take.pause(0.6)
+    take.pause(0.4)
     take.center("#log .log-row:last-child", 0.3)
-    take.point("#log .log-row:last-child", 1.5)
+    take.point("#log .log-row:last-child", 1.2, caption=1)
     take.hold()
     take.js("panel", "", [])
 
     facts["account_after"] = take.budget()
     facts["calls"] = app.get("/api/calls")["calls"]
     take.beat("end")
+    take.say(0)
     take.js("card", end_card(app, facts))
     take.hold()
     return facts
@@ -602,8 +848,8 @@ def end_card(app: App, facts: dict[str, Any]) -> list[list[str]]:
     if app.provider == "live":
         before, after = facts["account_before"], facts.get("account_after") or {}
         run = (
-            f"This take: {searches} live SerpApi searches, from 127.0.0.1:{port} · "
-            f"Account API: {before['left']} → {after.get('left')} searches left"
+            f"This take: {searches} live SerpApi searches, from 127.0.0.1:{port} · Account API "
+            f"searches left: {before['left']} before, {after.get('left')} after (it can trail)"
         )
     else:
         run = (
@@ -621,29 +867,41 @@ def end_card(app: App, facts: dict[str, Any]) -> list[list[str]]:
 
 def play_cutaway(take: Take) -> dict[str, Any]:
     """Sample A again on the replay provider, whose recorded responses carry HCLTech's notice:
-    the decisive path the filmed live search didn't reach."""
+    the decisive path a live search that found none didn't reach."""
     page, app = take.page, take.app
     take.goto(app.url)
     page.wait_for_selector("#bind:not(:text('…'))")
     page.wait_for_selector("#sample-wrap:not([hidden])")
 
     take.beat("replay-a")
-    take.point("#provider", 0.5)
-    take.point("#replay", 0.5)
-    take.click("#sample", 0.2)
+    take.say(0)
+    take.ring("#provider", 0.7, caption=0)
+    take.ring("#replay", 0.7)
     page.select_option("#sample", "a")
-    take.pause(0.5)
+    take.pause(0.3)
     take.click("#open-case", 0.2)
     page.wait_for_selector("[data-focus=confirm-claims]")
     case = app.get("/api/state")["cases"][-1]["id"]
-    take.point(".chips", 0.4)
-    take.confirm(0.2)
+    take.confirm(0.1)
+    take.say(1)
     take.searching("[data-focus=investigate]")
-    take.show("#trace", 1.0)
-    take.show_text("#trace", "not spent", 0.8)
-    take.show("#evidence", 1.6)
+    take.show("#trace", 0.5)
+    take.show_text("#trace", "not spent", 0.6)
+    take.show("#evidence", 1.0, caption=1)
     take.hold()
     return {"case_a": case, "calls": app.get("/api/calls")["calls"]}
+
+
+def needs_cutaway(outcome: str) -> bool:
+    """Only a film whose live search found no notice carries the replay of the decisive path."""
+    return outcome in UNVERIFIED
+
+
+def cutaway_if_needed(workdir: Path, max_usage: int) -> None:
+    """Captures the replay cutaway, when the film's live search found no notice."""
+    outcome = json.loads((workdir / "events.json").read_text("utf-8"))["outcome"]
+    if needs_cutaway(outcome):
+        capture("replay", workdir / "cutaway", max_usage, "cutaway")
 
 
 def keep_partial(take: Take, failure: BaseException) -> None:
@@ -657,6 +915,7 @@ def keep_partial(take: Take, failure: BaseException) -> None:
         "provider": take.app.provider,
         "aborted": f"{type(failure).__name__}: {failure}",
         "marks": [{"beat": k, "t": t} for k, t in take.marks],
+        "cues": take.cues,
         "waits": [vars(w) for w in take.waits],
         "calls": calls,
     }
@@ -669,10 +928,15 @@ def capture(provider: str, workdir: Path, max_usage: int, part: str = "film") ->
     if part == "cutaway" and provider != "replay":
         raise Refused("the cutaway is a replay of the recordings: run it with --provider replay")
     workdir.mkdir(parents=True, exist_ok=True)
-    plan_beats = beats(provider, part)
-    narration = synthesize(plan_beats, workdir / "narration")
-    spoken = sum(n["seconds"] for n in narration.values())
-    print(f"record_demo: narration {spoken:.1f} s over {len(narration)} beats")
+    live_film = provider == "live" and part == "film"
+    combos = [(o, b) for o in OUTCOMES for b in SAMPLE_B] if live_film else [("decisive", "clean")]
+    variants = {}
+    for outcome, sample_b in combos:
+        plan_beats = beats(provider, part, outcome, sample_b)
+        variants[(outcome, sample_b)] = (plan_beats, synthesize(plan_beats, workdir / "narration"))
+    first = variants[("decisive", "clean")][1]
+    spoken = sum(c["seconds"] for v in first.values() for c in v)
+    print(f"record_demo: narration {spoken:.1f} s over {len(first)} beats")
     video_dir = workdir / "video"
     shutil.rmtree(video_dir, ignore_errors=True)
 
@@ -689,7 +953,7 @@ def capture(provider: str, workdir: Path, max_usage: int, part: str = "film") ->
             context.add_init_script(OVERLAY)
             context.set_default_timeout(20_000)
             page = context.new_page()
-            take = Take(page, app, workdir, plan_beats, narration)
+            take = Take(page, app, workdir, variants)
             recorded_at = datetime.now().astimezone().isoformat(timespec="seconds")
             aborted = False
             try:
@@ -711,19 +975,27 @@ def capture(provider: str, workdir: Path, max_usage: int, part: str = "film") ->
     webm = workdir / "capture.webm"
     video.replace(webm)
     shutil.rmtree(video_dir, ignore_errors=True)
+    outcome = facts.get("outcome", "decisive")
+    sample_b = facts.get("sample_b", "clean")
+    narration = variants[(outcome, sample_b)][1]
     events = {
         "provider": provider,
         "part": part,
+        "outcome": outcome,
+        "sample_b": sample_b,
         "recorded_at": recorded_at,
         "bind": app.origin.removeprefix("http://"),
         "video": webm.name,
         "end": end,
         "marks": [{"beat": k, "t": t} for k, t in take.marks],
+        "cues": take.cues,
         "waits": [vars(w) for w in take.waits],
+        "captions": take.captions,
         "expects": take.expects,
         "checks": take.checks,
         "narration": {
-            k: {"text": n["text"], "seconds": n["seconds"]} for k, n in narration.items()
+            k: [{"text": n["text"], "seconds": n["seconds"]} for n in clips]
+            for k, clips in narration.items()
         },
         **facts,
     }
@@ -791,14 +1063,59 @@ def encode(out: Path, seconds: float, crf_preset: tuple[str, str]) -> list[str]:
     ]  # fmt: skip
 
 
+STILL_NOISE = "-55dB"
+STILL_SECONDS = 0.8
+
+
+def find_stills(capture: Path, cache: Path) -> list[tuple[float, float]]:
+    """The capture seconds during which the screen did not change, as ffmpeg's ``freezedetect``
+    finds them (``STILL_SECONDS`` or longer, frames within ``STILL_NOISE`` of each other).
+    Kept in ``cache`` while the capture is no newer than it."""
+    if cache.exists() and cache.stat().st_mtime >= capture.stat().st_mtime:
+        return [tuple(pair) for pair in json.loads(cache.read_text("utf-8"))]
+    out = subprocess.run(
+        [
+            FFMPEG, "-hide_banner", "-i", str(capture), "-map", "0:v:0",
+            "-vf", f"freezedetect=n={STILL_NOISE}:d={STILL_SECONDS}", "-f", "null", "-",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stderr  # fmt: skip
+    starts = [float(x) for x in re.findall(r"freeze_start: ([\d.]+)", out)]
+    ends = [float(x) for x in re.findall(r"freeze_end: ([\d.]+)", out)]
+    stills = list(zip(starts, ends, strict=False))
+    cache.write_text(json.dumps(stills), "utf-8")
+    return stills
+
+
+def dropped_sentences(
+    plan_beats: Sequence[Beat], cues: dict[str, list[float]]
+) -> tuple[dict[str, int], dict[str, float]]:
+    """How many sentences of each beat the video keeps, and, for a beat that drops its last
+    ones, the capture second at which the page reached the first of them: where the beat ends."""
+    kept = {b.key: len(b.narration) - b.dropped for b in plan_beats}
+    trims = {b.key: cues[b.key][kept[b.key]] for b in plan_beats if b.dropped}
+    return kept, trims
+
+
 def render_part(
-    workdir: Path, out: Path, allow_unchecked: bool, crf_preset: tuple[str, str]
+    workdir: Path,
+    out: Path,
+    allow_unchecked: bool,
+    crf_preset: tuple[str, str],
+    cut_stills: bool = False,
 ) -> Part:
     """One capture as an mp4: its narration laid over the timeline, its waits sped up under
     labels. Refuses a check that failed for a claim the beat still makes; a claim the capture
     never checked is refused unless ``allow_unchecked``."""
     events = json.loads((workdir / "events.json").read_text("utf-8"))
-    plan_beats = beats(events["provider"], events.get("part", "film"))
+    plan_beats = beats(
+        events["provider"],
+        events.get("part", "film"),
+        events["outcome"],
+        events.get("sample_b", "clean"),
+    )
     failed, unchecked = judge(events["expects"], plan_beats)
     failed += [c for c in events["checks"] if not c["ok"]]
     if failed or (unchecked and not allow_unchecked):
@@ -809,23 +1126,29 @@ def render_part(
             f"{lines}"
         )
     clips = synthesize(plan_beats, workdir / "narration")
+    # A beat's dropped sentences, and its footage from the second the page reached the first of
+    # them, are left out of the video.
+    kept, trims = dropped_sentences(plan_beats, events["cues"])
+    clips = {key: cs[: kept[key]] for key, cs in clips.items()}
     waits = [timeline.Wait(**w) for w in events["waits"]]
     marks = [(m["beat"], m["t"]) for m in events["marks"]]
     plan = timeline.plan(
         marks,
         events["end"],
         waits,
-        {k: c["seconds"] for k, c in clips.items()},
-        {b.key: b.delay for b in plan_beats},
+        {k: [c["seconds"] for c in cs] for k, cs in clips.items()},
+        events["cues"],
+        find_stills(workdir / events["video"], workdir / "stills.json") if cut_stills else (),
+        trims,
     )
     images = label_images(plan.labels, workdir / "labels")
 
-    spoken = [b for b in plan.beats if b.narration_seconds]
     inputs = ["-i", str(workdir / events["video"])]
     for image in images:
         inputs += ["-i", str(image)]
-    for beat in spoken:
-        inputs += ["-i", str(clips[beat.key]["path"])]
+    for beat in plan.beats:
+        for clip in clips.get(beat.key, ()):
+            inputs += ["-i", str(clip["path"])]
     graph = ";".join([timeline.video_filter(plan), timeline.audio_filter(plan, 1 + len(images))])
     out.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg(
@@ -872,6 +1195,7 @@ def _beat_rows(part: Part, offset: Callable[[float], float]) -> list[dict[str, A
     """``part``'s beats in the final's seconds: ``offset(start)`` is what a beat starting at
     ``start`` is moved by."""
     texts = {b.key: b for b in part.beats}
+    waits = [timeline.Wait(**w) for w in part.events["waits"]]
     return [
         {
             "beat": b.key,
@@ -880,10 +1204,28 @@ def _beat_rows(part: Part, offset: Callable[[float], float]) -> list[dict[str, A
             "capture_start": round(b.start, 2),
             "capture_end": round(b.end, 2),
             "freeze": round(b.freeze, 2),
-            "narration_at": round(b.narration_at + offset(b.out_start), 2),
-            "narration_seconds": round(b.narration_seconds, 2),
-            "caption": texts[b.key].caption,
-            "narration": texts[b.key].narration,
+            "narration_late": round(b.late, 2),
+            "narration": [
+                {"at": round(c.at + offset(b.out_start), 2), "seconds": round(c.seconds, 2)}
+                for c in b.clips
+            ],
+            "captions": [
+                {
+                    "at": round(
+                        b.out_start
+                        + timeline.output_elapsed(b.start, c["t"], waits, cuts=part.plan.cuts)
+                        + offset(b.out_start),
+                        2,
+                    ),
+                    "slot": c["slot"],
+                    "text": c["text"],
+                }
+                for c in part.events.get("captions", [])
+                if c["beat"] == b.key and b.start <= c["t"] <= b.end
+            ],
+            "sentences": list(
+                texts[b.key].narration[: len(texts[b.key].narration) - texts[b.key].dropped]
+            ),
         }
         for b in part.plan.beats
     ]
@@ -905,13 +1247,20 @@ def _speedups(part: Part, offset: Callable[[float], float]) -> list[dict[str, An
 
 
 def render(workdir: Path, out: Path, allow_unchecked: bool = False) -> dict[str, Any]:
-    """The film as an mp4 at ``out``, with ``render.json`` beside it. When ``workdir/cutaway``
-    holds a capture, its replay is spliced in after the ``CUTAWAY_AFTER`` beat."""
+    """The film as an mp4 at ``out``, with ``render.json`` beside it. When sample A's live search
+    found no notice, the replay in ``workdir/cutaway`` is spliced in after the ``CUTAWAY_AFTER``
+    beat."""
     cutaway_dir = workdir / "cutaway"
-    spliced = (cutaway_dir / "events.json").exists()
+    outcome = json.loads((workdir / "events.json").read_text("utf-8"))["outcome"]
+    spliced = needs_cutaway(outcome)
+    if spliced and not (cutaway_dir / "events.json").exists():
+        raise Refused(
+            "sample A's live search found no notice: capture the replay cutaway "
+            f"(--part cutaway --provider replay --workdir {cutaway_dir}) to splice in"
+        )
     if spliced:
         parts = workdir / "parts"
-        film = render_part(workdir, parts / "film.mp4", allow_unchecked, PART_ENCODE)
+        film = render_part(workdir, parts / "film.mp4", allow_unchecked, PART_ENCODE, True)
         cut = render_part(cutaway_dir, parts / "cutaway.mp4", allow_unchecked, PART_ENCODE)
         at = next(b.out_end for b in film.plan.beats if b.key == CUTAWAY_AFTER)
         planned = film.plan.duration + cut.plan.duration
@@ -920,7 +1269,7 @@ def render(workdir: Path, out: Path, allow_unchecked: bool = False) -> dict[str,
         out.parent.mkdir(parents=True, exist_ok=True)
         join(parts / "film.mp4", parts / "cutaway.mp4", at, out, planned)
     else:
-        film = render_part(workdir, out, allow_unchecked, FINAL_ENCODE)
+        film = render_part(workdir, out, allow_unchecked, FINAL_ENCODE, True)
         cut, at, planned = None, film.plan.duration, film.plan.duration
         if planned >= timeline.CEILING:
             raise Refused(f"the plan runs {planned:.1f} s, not under {timeline.CEILING:.0f} s")
@@ -969,6 +1318,8 @@ def render(workdir: Path, out: Path, allow_unchecked: bool = False) -> dict[str,
         },
         "audio": {k: audio.get(k) for k in ("codec_name", "sample_rate", "channels")},
         "provider": events["provider"],
+        "outcome": events["outcome"],
+        "sample_b": events.get("sample_b", "clean"),
         "recorded_at": events["recorded_at"],
         "bind": events["bind"],
         "searches_spent": sum(1 for c in calls if c.get("provider") == "live"),
@@ -990,6 +1341,14 @@ def render(workdir: Path, out: Path, allow_unchecked: bool = False) -> dict[str,
         },
         "beats": sorted(rows, key=lambda r: r["out_start"]),
         "speedups": sorted(speedups, key=lambda r: r["out_start"]),
+        "cuts": {
+            "what": "stretches where the screen did not change and nobody was speaking",
+            "seconds": round(sum(c.seconds for c in film.plan.cuts), 2),
+            "capture": [
+                {"start": round(c.start, 2), "seconds": round(c.seconds, 2)}
+                for c in film.plan.cuts
+            ],
+        },
         "expects": events["expects"] + (cut.events["expects"] if cut else []),
         "checks": events["checks"],
         "failed": film.failed + (cut.failed if cut else []),
@@ -1007,6 +1366,11 @@ def render(workdir: Path, out: Path, allow_unchecked: bool = False) -> dict[str,
 # ---- the command line ---------------------------------------------------------------------
 
 
+def _path(text: str) -> Path:
+    """Absolute, since the page opens the saved board as a ``file:`` address."""
+    return Path(text).resolve()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m demo.record_demo", description=__doc__.split("\n\n")[0]
@@ -1014,14 +1378,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("capture", "render", "all"):
         command = commands.add_parser(name)
-        command.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
+        command.add_argument("--workdir", type=_path, default=DEFAULT_WORKDIR)
         if name != "render":
             command.add_argument("--provider", choices=("live", "replay"), required=True)
             command.add_argument("--max-usage", type=int, default=DEFAULT_MAX_USAGE)
         if name == "capture":
             command.add_argument("--part", choices=PARTS, default="film")
         if name != "capture":
-            command.add_argument("--out", type=Path, default=DEFAULT_OUT)
+            command.add_argument("--out", type=_path, default=DEFAULT_OUT)
             command.add_argument("--allow-unchecked", action="store_true")
     args = parser.parse_args(argv)
     steps: list[Callable[[], Any]] = []
@@ -1030,9 +1394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "all":
         steps.append(lambda: capture(args.provider, args.workdir, args.max_usage))
         if args.provider == "live":
-            steps.append(
-                lambda: capture("replay", args.workdir / "cutaway", args.max_usage, "cutaway")
-            )
+            steps.append(lambda: cutaway_if_needed(args.workdir, args.max_usage))
     if args.command in ("render", "all"):
         steps.append(lambda: render(args.workdir, args.out, args.allow_unchecked))
     try:

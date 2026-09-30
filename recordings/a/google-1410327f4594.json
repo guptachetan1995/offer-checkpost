@@ -1,0 +1,52 @@
+{
+  "recordedAt": "2026-09-30T13:06:14+05:30",
+  "engine": "google",
+  "params": {
+    "engine": "google",
+    "q": "site:hcltech.com (recruitment OR hiring) (fraud OR scam OR fake) never (fee OR money OR payment)",
+    "gl": "in",
+    "google_domain": "google.co.in",
+    "hl": "en",
+    "location": "Noida, India",
+    "json_restrictor": "knowledge_graph.{title,website},organic_results[].{title,link,snippet}"
+  },
+  "response": {
+    "organic_results": [
+      {
+        "title": "Beware of Fraudulent Job Offers & Letters",
+        "link": "https://www.hcltech.com/de-de/careers/genuine-job-offers",
+        "snippet": "HCLTech will never ask for any payment of money at any stage of the interview or recruitment process. How to identify and avoid recruitment fraud? You are ..."
+      },
+      {
+        "title": "Anti-Bribery and Anti-Corruption Policy - Global",
+        "link": "https://www.hcltech.com/sites/default/files/documents/inline-migration/Anti-Bribery-and-Anti-Corruption-Policy-Global-9th-Oct-2022.pdf",
+        "snippet": "However, the following steps may help: • Require official receipts for any payments you make. • Report suspicions, concerns, queries and demands for ..."
+      },
+      {
+        "title": "Code of Business Ethics and Conduct-Global",
+        "link": "https://www.hcltech.com/sites/default/files/documents/resources/pdf-landing-page/files/2025/12/17/Code-of-business-Ethics-and-Conduct-Global-13-05-2025.pdf",
+        "snippet": "Do not make any payments and report the incident immediately to your manager. You may also report this to the Global Ethics Helpline. We never ..."
+      },
+      {
+        "title": "Financial Statements Including the Statutory Auditor's Report",
+        "link": "https://www.hcltech.com/sites/default/files/documents/resources/pdf-landing-page/files/2024/07/24/52-hcl-technologies-columbia-sas-english.pdf",
+        "snippet": "must be settled within 12 months from the reporting date, or iv) have no unconditional right to defer payment at least within twelve (12) ..."
+      },
+      {
+        "title": "Annual Report 2017-18 | 1",
+        "link": "https://www.hcltech.com/sites/default/files/documents/inline-migration/annual_report_2018.pdf",
+        "snippet": "Investors are cautioned that this discussion contains forward-looking statements that involve risks and uncertainties. When words."
+      },
+      {
+        "title": "HCL TECHNOLOGIES PHILIPPINES, INC.",
+        "link": "https://www.hcltech.com/sites/default/files/documents/inline-migration/43_hcl_technologies_philippines_inc.pdf?download=1",
+        "snippet": "Misstatements can arise from fraud or error and are considered material if, individually or in the aggregate, they could reasonably be expected ..."
+      },
+      {
+        "title": "August 4, 2021 The General Manager BSE Limited ...",
+        "link": "https://www.hcltech.com/sites/default/files/document/open/SEBI/stockexchangeintimation.pdf",
+        "snippet": "“RESOLVED THAT pursuant to the provisions of Sections 149,. 150 and 152 read with Schedule IV of the Companies Act, 2013."
+      }
+    ]
+  }
+}

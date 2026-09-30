@@ -39,7 +39,7 @@ AGENT_TOOLS = {
     "open_case": ({"text"}, set()),
     "update_claims": ({"case_id"}, {"fields", "confirm"}),
     "lookup_official_site": ({"case_id"}, set()),
-    "find_fraud_notice": ({"case_id"}, set()),
+    "find_fraud_notice": ({"case_id"}, {"wording"}),
     "confirm_sender_domain": ({"case_id", "domain"}, set()),
     "check_job_listings": ({"case_id"}, set()),
     "check_office": ({"case_id"}, set()),

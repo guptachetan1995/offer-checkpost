@@ -63,7 +63,16 @@ RESTRICTORS = {
     "google_maps_reviews": "reviews[].{snippet,rating,iso_date,link}",
 }
 
-FRAUD_NOTICE_TERMS = "(fraud OR fake OR scam OR beware) (recruitment OR job OR offer OR hiring)"
+# Each OR group stays parenthesised so ``site:`` still scopes the whole query. ``never`` plus a
+# fee word put an employer's own "we never ask for any payment" notice first in the 30 Sep 2026
+# probes: the best of five phrasings tried on four employers. It is also narrow enough that
+# Google sometimes drops ``site:`` for it and answers with generic fraud pages (the film take
+# that afternoon), so the planner retries once with the notice's usual titles.
+FRAUD_NOTICE_WORDINGS = {
+    "specific": "(recruitment OR hiring) (fraud OR scam OR fake) never (fee OR money OR payment)",
+    "broad": '("recruitment fraud" OR "fake job offers" OR "recruitment scams" OR "fraudulent")',
+}
+FRAUD_NOTICE_TERMS = FRAUD_NOTICE_WORDINGS["specific"]
 SCAM_REPORT_TERMS = "job offer (fake OR scam OR fraud)"
 CONTACT_REPORT_TERMS = "(scam OR fraud OR fake)"
 
@@ -96,8 +105,10 @@ def lookup_official_site_params(company: str, city: str | None = None) -> dict[s
     return _google(search_name(company), city)
 
 
-def find_fraud_notice_params(official_domain: str, city: str | None = None) -> dict[str, str]:
-    return _google(f"site:{official_domain} {FRAUD_NOTICE_TERMS}", city)
+def find_fraud_notice_params(
+    official_domain: str, city: str | None = None, wording: str = "specific"
+) -> dict[str, str]:
+    return _google(f"site:{official_domain} {FRAUD_NOTICE_WORDINGS[wording]}", city)
 
 
 def confirm_sender_domain_params(
@@ -495,12 +506,15 @@ def read_fraud_notice(
     as a fraud term or a fee phrase; a bank's page on fixed-deposit fraud or fake loan offers
     is not one. A notice with a fee phrase ("never charge", "no fee", "does not charge", "not
     ask for money", "not ask for payment", "deposit") wins over one without. Both rules need
-    a fee to have been asked; without one the notice is quoted in the facts only."""
-    notices = [
-        r
-        for r in response.get("organic_results", [])
-        if is_official(r.get("link", ""), official_domain) and _is_recruitment_notice(r)
-    ]
+    a fee to have been asked; without one the notice is quoted in the facts only.
+
+    A search that returns no result on the official domain is inconclusive, not a finding: Google
+    can drop ``site:`` and answer with pages of other sites, so it says nothing about whether
+    the employer publishes a notice. It fires no signal, and its facts carry
+    ``inconclusive: true`` for the planner's one retry and for the drafts."""
+    results = response.get("organic_results", [])
+    on_domain = [r for r in results if is_official(r.get("link", ""), official_domain)]
+    notices = [r for r in on_domain if _is_recruitment_notice(r)]
     phrased = [(r, m) for r in notices if (m := _FEE_PHRASE.search(_text(r)))]
     notice, phrase = phrased[0] if phrased else (notices[0] if notices else None, None)
 
@@ -520,12 +534,26 @@ def read_fraud_notice(
             )
             signals.append(_signal("employer_fraud_notice_exists", evidence, detail))
 
+    inconclusive = not on_domain
     facts = {
         "notice": {k: notice.get(k) for k in ("title", "link", "snippet")} if notice else None,
         "feePhrase": phrase.group(0) if phrase else None,
+        "results": len(results),
+        "onDomain": len(on_domain),
+        "inconclusive": inconclusive,
     }
-    if notice is None:
-        note = f"no recruitment-fraud notice on {official_domain}"
+    if inconclusive:
+        where = f"{len(results)} results, all elsewhere" if results else "no results at all"
+        note = (
+            f"inconclusive: the search returned no page from {official_domain} ({where}), so it "
+            "says nothing about a notice"
+        )
+    elif notice is None:
+        pages = f"{len(on_domain)} page{'s' if len(on_domain) != 1 else ''}"
+        note = (
+            f"{pages} from {official_domain} came back, "
+            f"{'none is' if len(on_domain) != 1 else 'it is not'} a recruitment-fraud notice"
+        )
     elif phrase:
         note = f'{official_domain} has a recruitment-fraud notice: "{phrase.group(0)}"'
     else:

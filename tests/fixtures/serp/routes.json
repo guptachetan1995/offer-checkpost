@@ -18,7 +18,7 @@
     "check": "find_fraud_notice",
     "params": {
       "engine": "google",
-      "q": "site:brand.example (fraud OR fake OR scam OR beware) (recruitment OR job OR offer OR hiring)",
+      "q": "site:brand.example (recruitment OR hiring) (fraud OR scam OR fake) never (fee OR money OR payment)",
       "gl": "in",
       "google_domain": "google.co.in",
       "hl": "en",

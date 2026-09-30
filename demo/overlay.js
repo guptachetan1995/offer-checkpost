@@ -97,8 +97,17 @@ only. */
         transition: 'opacity 400ms', opacity: '1',
       });
       layer().appendChild(ring);
+      // The ring is fixed on screen, so it is dropped the moment its target moves or goes (a
+      // scroll, a re-render) instead of lingering over empty space.
+      const born = performance.now();
+      const watch = () => {
+        const now = el.isConnected ? el.getBoundingClientRect() : null;
+        const moved = !now || Math.abs(now.left - r.left) > 1 || Math.abs(now.top - r.top) > 1;
+        if (moved || performance.now() - born > 1600) ring.remove();
+        else requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
       setTimeout(() => { ring.style.opacity = '0'; }, 1100);
-      setTimeout(() => ring.remove(), 1600);
       return true;
     },
     panel(title, lines) {
@@ -117,7 +126,7 @@ only. */
       }
       el.appendChild(box);
     },
-    card(lines) {
+    card(lines, shown) {
       const el = part('__oc_card');
       el.replaceChildren();
       if (!lines) return;
@@ -127,9 +136,18 @@ only. */
         gap: '18px', font: `20px/1.4 ${FONT}`, textAlign: 'center', padding: '0 80px',
       });
       const sizes = { title: `800 64px/1.1 ${FONT}`, sub: `500 26px/1.35 ${FONT}`,
-        url: `600 28px/1.3 ${MONO}`, line: `500 22px/1.4 ${FONT}`, fine: `400 18px/1.4 ${FONT}` };
+        url: `600 28px/1.3 ${MONO}`, line: `500 22px/1.4 ${FONT}`, fine: `400 18px/1.4 ${FONT}`,
+        point: `600 32px/1.35 ${FONT}` };
+      // A "point" line beyond the first `shown` of them keeps its room but isn't drawn yet.
+      let points = 0;
       for (const [kind, text] of lines) {
-        box.appendChild(make('div', { font: sizes[kind], color: kind === 'fine' ? '#bdb9ae' : kind === 'url' ? '#ffb37a' : '#fbfaf7' }, text));
+        const el = make('div', { font: sizes[kind], color: kind === 'fine' ? '#bdb9ae' : kind === 'url' ? '#ffb37a' : '#fbfaf7' }, text);
+        if (kind === 'point') {
+          points += 1;
+          if (shown !== undefined && points > shown) el.style.visibility = 'hidden';
+          style(el, { maxWidth: '1000px', textAlign: 'left' });
+        }
+        box.appendChild(el);
       }
       el.appendChild(box);
     },

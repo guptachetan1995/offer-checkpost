@@ -16,17 +16,42 @@ Google Jobs, and a real office shows up on Google Maps.
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
-**Status: the investigator, the local web app and its MCP adapter are built and tested, and
-the three demo samples' SerpApi responses were recorded with a real key on 29 September 2026;
-the demo video was filmed on live SerpApi the same day, with one replay cutaway labelled as
-such.** `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
-`python -m offer_checkpost mcp` serves its agent tools to an MCP client
-([Use it from an MCP client](#use-it-from-an-mcp-client)), and
-`python -m offer_checkpost investigate <file>` runs an offer through the same path from the
-command line; `samples/offers/` holds 21 fictional offers to try. With a SerpApi key it
-searches live, and one search can take about a minute. Without one it starts in replay mode, which serves those recorded responses
-(`recordings/`), dated and marked as not live, so the three demo samples run end to end with no
-key ([The three demo samples](#the-three-demo-samples)).
+![The evidence card quoting HCLTech's own notice, with its link and the two live searches that found it](docs/img/evidence-employer-notice.jpg)
+
+*Frame from the recorded demo (live SerpApi, 30 September 16:00 IST): the employer's own
+notice, quoted with its link, after two searches.*
+
+**How this differs from a 0-100 scam-score checker:**
+- **One check answers the batch.** A forward that makes the same claims as one already
+  checked is answered at 0 searches, and the trace names the case it reused.
+- **The proof is the employer's own words.** When a fee is asked, it looks for the employer's
+  own recruitment-fraud notice on its official domain and quotes it with the link.
+- **An agent cannot publish, through the app's tools, API or MCP adapter.** The agent's tools and the person's verbs are separate
+  lists, and an MCP client that tries to publish a verdict is refused and logged.
+
+Sample A's live search for HCLTech's own notice moved during 30 September, and the demo video
+is the take that found it; [If your live run differs](#the-three-demo-samples) has the whole
+account.
+
+A score checker returns a number about the message; Offer Checkpost returns quoted, linked
+search results about each claim in it, and its best band is "No contradictions found", never a
+score.
+
+**Try it with no key, in two commands** (macOS or Linux, Python 3.11 or newer; Windows in
+[Setup, run, test](#setup-run-test)):
+
+```bash
+make setup    # virtualenv + hash-locked install
+make run      # prints http://127.0.0.1:8741/?token=…: open it, then "Try a sample"
+```
+
+With no `SERPAPI_KEY` it starts in replay mode, which serves SerpApi responses recorded with a
+real key on 29 and 30 September 2026. Replay answers the three demo samples (A, B and C, with
+**Run remaining checks** on A and C), `a-forwarded.txt` (Sample A again, at 0 searches) and the
+six samples that name no company; every other sample in `samples/offers/` needs a key
+([What replay answers](#run-it)). The whole test suite runs offline: 1713 tests pass (1 more is
+skipped because it spends a live search), among them the test in `tests/test_gate.py` that
+refuses each human-only verb to the agent and checks that it changed nothing.
 
 ## What's different here
 
@@ -43,8 +68,39 @@ key ([The three demo samples](#the-three-demo-samples)).
   candidates nothing fires `fee_contradicts_employer`, a strong red signal quoted with its link
   (`read_fraud_notice` in `src/offer_checkpost/checks.py`, the rule table in
   `src/offer_checkpost/rules.py`).
+  The query is `site:<domain> (recruitment OR hiring) (fraud OR scam OR fake) never (fee OR
+  money OR payment)`. Each OR group stays in parentheses so `site:` scopes the whole query (a
+  probe with the top-level OR unparenthesised wandered off the domain), and `never` with a fee
+  word put an employer's own "we never ask for any payment" notice first in the 30 September
+  probes. Measured on 30 September 2026 on four employers, HCLTech, Infosys, TCS and Wipro, the
+  previous phrasing (`(fraud OR fake OR scam OR beware) (recruitment OR job OR offer OR
+  hiring)`) found no notice for any of them; this one, the best of five phrasings tried on those
+  same four, found HCLTech's and Wipro's fee statements and Infosys's notice, not TCS's. It was
+  chosen on the employers it was scored on, and no test isolates `never` as the cause. That is
+  one measurement on one day: results move with Google's ranking, so a notice found today may not be found
+  tomorrow, and an employer whose notice is not found stays unverified, never cleared. It
+  moved the same day for HCLTech; [If your live run differs](#the-three-demo-samples) has the
+  times, and the demo video is the take that quoted the notice.
+- **A search that comes back from other sites says nothing, and the app says so.** The saved
+  response of the 13:45 IST take held ten results and none was from hcltech.com: Google had
+  apparently dropped the `site:` restriction for such a narrow query and answered with generic
+  fraud pages. The app then reported "no recruitment-fraud notice on hcltech.com", a statement of
+  absence the search had not earned. Now a fraud-notice search with no result on the employer's
+  domain is **inconclusive** (`read_fraud_notice`: no signal, `inconclusive: true` in its
+  facts, and the trace, the evidence panel and the drafts say "no page from <domain>, so it
+  says nothing about a notice"). The planner then runs it **once more** with `wording:
+  "broad"`, `site:<domain> ("recruitment fraud" OR "fake job offers" OR "recruitment scams" OR
+  "fraudulent")`, the notice's usual titles, and says why in the trace: the first search returned no
+  page from the domain. The retry is a numbered search that counts against the case's budget of 6, and
+  a second inconclusive search stays inconclusive. A search that did return pages from the
+  domain but none that is a recruitment-fraud notice is a finding ("N pages from <domain>
+  came back, none is a recruitment-fraud notice") and is not retried. The retry is covered by fake-provider and browser tests; it has not yet
+  fired on a live response, and no replay shows it, since replay would then serve invented
+  SerpApi content. The broad wording itself was probed live, once, on the same morning: the broad wording returned ten results on the domain and a notice for HCLTech
+  and Infosys, and none for TCS and Wipro; Google's ranking moves between calls.
 - **Each search is chosen from what the earlier ones found.** The planner reorders and skips
-  checks by what the earlier searches found, stops once the band is high risk and no search
+  checks by what the earlier searches found, tries a fraud-notice search that says nothing once
+  more, stops once the band is high risk and no search
   left can change it, and its trace shows every search with its reason, every skip, and the
   searches saved. Every search sends a `json_restrictor`, so SerpApi returns only the fields
   its reader uses (`src/offer_checkpost/planner.py`, `RESTRICTORS` in
@@ -54,7 +110,8 @@ key ([The three demo samples](#the-three-demo-samples)).
   `consistent_with_genuine`), never "verified", "safe" or a 0-100 score. The board refuses a
   label the checks contradict: "No contradictions found" on any other band, and a red-flag
   label on that best band. On an unverified draft a person may still choose a red-flag label,
-  which is their call, and the post keeps the draft band beside it. A verdict posted for others is a person's click, and the post is a snapshot of
+  which is their call, and the post record stores the draft band (the card and the WhatsApp text
+  do not show it). A verdict posted for others is a person's click, and the post is a snapshot of
   the claims and evidence they read, which nothing done to the case afterwards rewrites
   (`label_misfit` and `post` in `src/offer_checkpost/drafts.py`, `publish_verdict` in
   `src/offer_checkpost/verbs.py`).
@@ -65,6 +122,53 @@ key ([The three demo samples](#the-three-demo-samples)).
   that opened the address the app prints; a request can't claim to be them, and the MCP
   adapter is always the agent ([Run it](#run-it); `tests/test_gate.py`,
   `tests/test_server_http.py`, `tests/test_mcp.py`).
+
+### What it looks like
+
+Frames from the recorded demo, a live take on SerpApi on 30 September 2026 (16:00 IST), with
+no replay in it:
+
+![Sample A's claims as chips, each highlighted in the pasted message, with the verdict Unverified before any search](docs/img/claims-with-source-spans.jpg)
+
+*Frame from the recorded demo: the claims extracted from the message, each highlighted where it
+came from, before any search.*
+
+![Sample C's trace: two live searches, a reorder, and "4 searches were not spent"](docs/img/trace-searches-saved.jpg)
+
+*Frame from the recorded demo (live SerpApi): the planner's trace for Sample C, with the
+searches it saved.*
+
+![A scripted MCP client's publish_verdict call refused, and the REFUSED row in the activity log](docs/img/mcp-publish-refused.jpg)
+
+*Frame from the recorded demo: an MCP client is the agent, so its `publish_verdict` call is
+refused, and the activity log records it.*
+
+What the student receives is text like this, the "Copy for WhatsApp" of Sample A's post on the
+recorded responses (replay, 0 searches), published by a person as "Likely impersonation" with
+the note "Do not pay the fee.":
+
+```text
+*Offer check: Likely impersonation*
+The message: Data Entry Executive (WFH) · in the name of HCLTech · Noida · pay ₹38,000/month · fee asked: "refundable registration fee of ₹2,499"
+
+What the checks found:
+• fee asked: "To confirm your slot, pay a refundable registration fee of ₹2,499 within 2 hours."
+• employer says it charges no fee: a fee was asked, and hcltech.com's own recruitment-fraud notice says "never ask for any payment" https://www.hcltech.com/de-de/careers/genuine-job-offers
+
+Note: Do not pay the fee.
+
+This describes this message, not the company named in it.
+Published 30 Sep 2026, 14:49 IST by a person, from web search results checked with Offer Checkpost.
+```
+
+**Status.** The investigator, the local web app and its MCP adapter are built and tested. The
+demo video was filmed on live SerpApi on 30 September 2026 at 16:00 IST (10 searches, no
+replay in it). `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
+`python -m offer_checkpost mcp` serves its agent tools to an MCP client
+([Use it from an MCP client](#use-it-from-an-mcp-client)), and
+`python -m offer_checkpost investigate <file>` runs an offer through the same path from the
+command line; `samples/offers/` holds 21 fictional offers to try. With a key it searches live,
+and one search can take about a minute.
 
 ## For judges: where to look
 
@@ -81,7 +185,7 @@ key ([The three demo samples](#the-three-demo-samples)).
 Job seekers in India, often freshers outside the big cities, get "shortlisted" on WhatsApp or
 Telegram for jobs they never applied to. The message names a well-known company, a work-from-home
 role, generous pay and a small fee "to confirm your slot within 2 hours". A college placement
-officer gets the same messages forwarded by students every week, with the question "is this
+officer gets the same messages forwarded by students often, with the question "is this
 real?", and students act on the answer. Scam messages are sent in bulk, so one answer serves a
 whole batch.
 
@@ -108,7 +212,8 @@ contradictions found", and a verdict posted for others to read is always a perso
 2. **Investigate.** A planner checks the claims against SerpApi and picks each next check from
    what the earlier searches found:
    - the company's domain is known and a fee was asked: it searches that domain for the
-     company's own fraud notice;
+     company's own fraud notice; a search that returns no page from that domain says nothing
+     about a notice, so it runs once more in a broader wording;
    - the firm has no web footprint at all: it checks for the office on Maps before looking for
      job listings;
    - every recruiter email and link is on the official domain and no fee was asked: it skips
@@ -148,12 +253,12 @@ becomes the person). No LLM runs inside the app.
 | Engine | What it checks | Fields read | Rules it can fire |
 |---|---|---|---|
 | `google` (knowledge graph, organic) | The company's official domain, and whether the recruiter's email or link domain is that domain, a look-alike, or a free-mail address | `knowledge_graph.website`, `organic_results[].link` | `sender_official` (only when a knowledge graph names the domain), `sender_lookalike`, `sender_free_mail`, `no_web_footprint` |
-| `google` with `site:<official domain>` | Whether the employer's own site publishes a recruitment-fraud notice that says it never charges fees; whether it mentions a look-alike domain, and in what context | `organic_results[].title`, `.snippet`, `.link` | `fee_contradicts_employer`, `employer_fraud_notice_exists`, `domain_named_in_fraud_notice` |
+| `google` with `site:<official domain>` | Whether the employer's own site publishes a recruitment-fraud notice that says it never charges fees (a search that returns no page from the site is inconclusive, not "no notice"); whether it mentions a look-alike domain, and in what context | `organic_results[].title`, `.snippet`, `.link` | `fee_contradicts_employer`, `employer_fraud_notice_exists`, `domain_named_in_fraud_notice` |
 | `google_jobs` | Whether this company lists this role near this city, with an apply option on the official domain, and what comparable roles there pay | `jobs_results[].apply_options`, `.detected_extensions.salary` (then `.extensions`, then `.description`) | `listing_match`, `no_listing_match`, `pay_outlier` |
 | `google_maps` | Whether the claimed office exists as a place | `local_results[].place_id`, `.title`, `.address` | `office_found`, `office_not_found` |
 | `google_news` | Reports of fake offers made in this company's name (a weak signal, since big brands are impersonated constantly) | `news_results[].title`, `.link`, `.source.name` | `impersonation_reports` |
 | `google_maps_reviews` (`query` filter), conditional | Whether reviews at a found office mention fees; runs only when a fee was asked or no listing matched | `reviews[].snippet`, `.iso_date`, `.link`; never the reviewer | `reviews_mention_fees` |
-| `google`, exact phrase, conditional | Whether a real recruiter phone or email already appears next to scam reports | `organic_results[].snippet` | `contact_reported` |
+| `google`, exact phrase, conditional | Whether a real recruiter phone or email already appears next to scam reports (covered by fixtures only: the sample contacts are placeholders, so no real response of this check is recorded) | `organic_results[].snippet` | `contact_reported` |
 | Account API (free) | Searches left this month, shown in the header | the five usage counts only | none, but it feeds the quota guard |
 
 **India parameters, per engine:** `google` and `google_jobs` use `gl=in`,
@@ -194,7 +299,7 @@ cannot see the screen, and each one says what the tool does not do.
 | `open_case` | Stores the pasted message, extracts claims with their source spans, runs the text rules | Search anything or contact anyone |
 | `update_claims` | Corrects or confirms extracted claims, recording who confirmed them, and flags the findings that depended on a corrected claim as stale (a new fee amount flags none: the rules read only whether a fee is asked) | Delete, re-fire or re-score findings; touch drafts or the board; change a case whose verdict is on the board |
 | `lookup_official_site` | Finds the official domain and classifies the recruiter's domains | Treat the official site as proof the offer is genuine |
-| `find_fraud_notice` | Quotes a recruitment-fraud notice from the employer's own domain, and says whether it mentions fees | Run before an official domain is known, or quote any other site as the employer |
+| `find_fraud_notice` | Quotes a recruitment-fraud notice from the employer's own domain, and says whether it mentions fees; takes `wording` `specific` (default) or `broad`; reports a search with no result on that domain as inconclusive | Run before an official domain is known, quote any other site as the employer, or treat an inconclusive search as proof that no notice exists |
 | `confirm_sender_domain` | Checks whether the official site mentions a look-alike domain, as its own second domain or as a known fake | Open either site, or check a domain that isn't in the offer |
 | `check_job_listings` | Looks for a matching listing and benchmarks pay against comparable listings | Apply to jobs, or treat a missing listing as proof |
 | `check_office` | Checks whether the claimed office exists on Google Maps | Judge a business by its rating |
@@ -233,13 +338,13 @@ as the agent's.
   the demo recording
 - Three search providers behind one interface: **live** (your SerpApi key, with a local
   cache), **replay** (serves the demo samples' SerpApi responses, recorded with a real key on
-  29 September 2026, trimmed and labelled with their date, and needs no key), and **fake**
+  29 and 30 September 2026, trimmed and labelled with their date, and needs no key), and **fake**
   (synthetic data for the tests)
 
 ## Setup, run, test
 
-It needs **Python 3.11 or newer**. `make setup` uses `python3.13` unless you name another
-interpreter: `make setup PY=python3.12` (or any 3.11+ on your machine). The commands, on macOS
+It needs **Python 3.11 or newer**. `make setup` uses the first of `python3.13`, `python3.12`
+and `python3.11` on your PATH unless you name another interpreter: `make setup PY=/path/to/python`. The commands, on macOS
 or Linux:
 
 ```bash
@@ -251,7 +356,18 @@ make lint
 ./verify.sh                   # everything above, as one check
 ```
 
-On Windows, or anywhere without `make`:
+Without `make` (macOS or Linux):
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install --require-hashes -r requirements-dev.lock
+.venv/bin/pip install --no-deps -e .
+cp .env.example .env
+.venv/bin/python -m offer_checkpost serve
+.venv/bin/python -m pytest
+```
+
+On Windows:
 
 ```bat
 python -m venv .venv
@@ -286,7 +402,7 @@ Offer Board are gone when the app stops, and the address changes each time it st
 
 - **Which searches it serves.** `--provider`, else `OFFER_CHECKPOST_PROVIDER`, else **live**
   SerpApi when `SERPAPI_KEY` is set, else **replay**: the SerpApi responses recorded with a
-  real key on 29 September 2026, served with no key. Each setting is read from the
+  real key on 29 and 30 September 2026, served with no key. Each setting is read from the
   environment, else from `.env` in the directory you run it from, so a key kept in `.env` needs
   no `export`. The page names the provider in its header, and in replay a banner says when the
   responses were recorded and that they are not live. Live, the app waits up to 90 seconds
@@ -356,26 +472,38 @@ isn't installed they are skipped with the reason, and no browser is ever downloa
 ### The three demo samples
 
 The messages are fictional. What the searches found about them is real: SerpApi's responses,
-recorded with a real key on 29 September 2026, trimmed and scrubbed, are in `recordings/` with
+recorded with a real key on 29 and 30 September 2026, trimmed and scrubbed, are in `recordings/` with
 their own notice, and replay serves them with no key.
 
 - **Sample A** (`samples/offers/a.txt`) impersonates **HCLTech**: a work-from-home data-entry
   "shortlist" at ₹38,000 a month, a ₹2,499 "refundable registration fee", and a recruiter on
   the look-alike `hcltech-careers.example`. HCLTech is the employer being impersonated, not the
   sender: the check finds hcltech.com and quotes HCLTech's own warning, from its own site, that
-  it never asks for recruitment fees. High risk after 2 searches, with 4 saved. **Run
+  it never asks for any payment. High risk after 2 searches, with 4 saved. **Run
   remaining checks** spends those 4: hcltech.com neither clears nor names the look-alike, no
   such listing by HCLTech turns up, HCLTech is on Maps in Noida, and its reviews there,
   filtered on "fee", come back empty. It stays high risk. That is what replay serves, from the
-  responses recorded on 29 September. A live search is not the same twice: when the demo video
-  was filmed later that day, the `site:` search returned no HCLTech notice, so nothing was
-  decisive, all 6 searches were spent and the case stayed unverified, as the video shows.
+  responses recorded on 30 September, with the query above. A live search is not the same
+  twice: on 30 September, the query this project used until then (`(fraud OR fake OR scam OR
+  beware) (recruitment OR job OR offer OR hiring)`) returned no HCLTech notice, so nothing
+  was decisive, all 6 searches were spent and the case stayed unverified, as the video filmed
+  on 29 September showed. With the new query, live on 30 September at 13:45 IST, the search
+  quoted no HCLTech notice: its response held no page from hcltech.com at all, so it was
+  inconclusive, not a finding that HCLTech has no notice (see [What's different
+  here](#whats-different-here)). At 15:22 IST it returned ten pages from hcltech.com, none a
+  recruitment page, and the case ran out its 6 searches unverified. At 15:50 and 16:00 it
+  quoted the notice: the demo video, shot at 16:00 IST, stops decisive at 2 searches, High
+  risk, 4 not spent, as replay does. The same offer forwarded again is answered from that
+  check at 0 searches, which the video shows too.
 - **Sample B** (`samples/offers/b.txt`) is a real opening at **Siemens**, an Application
   Support Engineer role in Bengaluru, open when it was recorded. The message links only to the
   listing on Siemens's own careers site, and names no pay and no recruiter's name or address.
   The link is on siemens.com and no fee is asked, so the fraud-notice search is skipped. The
   checks find that listing and a Siemens office on Maps, and nothing that contradicts the
-  offer: "No contradictions found" after 4 searches.
+  offer: "No contradictions found" after 4 searches. That is what replay serves and what the
+  demo video's take found at 16:01 IST. Live it can differ: at 15:53 IST Google Jobs returned
+  ten listings and none by Siemens for this role, so the case stayed Unverified (one red
+  signal, no matching listing, against the green office on Maps).
 - **Sample C** (`samples/offers/c.txt`) comes from an invented firm, Kavrellon Support
   Services, in Indore: customer support for freshers at ₹42,000 a month, a Telegram-only
   interview, and Aadhaar and bank photos asked for up front. No web footprint and no office on
@@ -384,6 +512,20 @@ their own notice, and replay serves them with no key.
   (₹17,292 a month).
 
 [`samples/offers/README.md`](samples/offers/README.md) says why these names were chosen.
+
+**If your live run differs.** Live results move day to day with Google's ranking, so a run
+today can differ from the recordings or the video.
+- The fraud-notice search moved during 30 September (the account is under Sample A above).
+  One case stays open: at 15:22 IST the query returned ten pages from hcltech.com, annual-report
+  and statutory-filing PDFs, none a recruitment page. The app reads that as "none is a
+  recruitment-fraud notice", does not retry it, and the case stays unverified after 6 searches;
+  a page from the domain that is not about recruitment is not treated as inconclusive yet.
+- An **Unverified** band after six searches is correct behaviour when no notice is quoted: an
+  employer whose notice is not found is never cleared, and nothing is made up. When the
+  notice search says nothing (no page from the employer's domain, in either wording), the trace
+  and the drafts say that, not "no notice".
+- `--provider replay` reproduces the recorded traces exactly: Sample A stops at 2 searches
+  with the notice quoted.
 
 ### Use it from an MCP client
 
@@ -448,8 +590,16 @@ make demo-render                         # the saved capture again, after a narr
 .venv/bin/python -m demo.record_demo render --workdir out/demo-capture --out out/offer-checkpost-demo.mp4
 ```
 
-A live take also records a short replay cutaway of sample A on the recorded responses, which
-hold HCLTech's notice, and the render splices it in under its own label. The render refuses a
+Each sentence of the narration starts when the page reaches what it says, so the capture is
+paced by the narration and the render lays each clip where the recorder cued it. A caption goes
+up at the moment of the on-screen change it describes and comes down when the page moves on.
+The recorder reads what sample A's live search found and the narration says it: the notice
+found by the first search (`decisive`), found by the retry after a first search that returned
+nothing from the domain (`retried`), or not found (`unverified`, `unverified_retried`). Only
+for a miss, the live take also records a short replay cutaway of sample A on the recorded
+responses, which hold the notice, that the render splices in under its own label, dated. Sample
+B's words follow what Google Jobs returned in the same way (`clean` or `unverified`). The render
+leaves out stretches where the screen did not change and nobody was speaking, and refuses a
 capture whose page didn't show what a beat's narration says. It also refuses narration
 rewritten since the capture that names text the capture never checked, unless
 `--allow-unchecked` (`make demo-render ALLOW_UNCHECKED=1`) says a person has looked at the
@@ -471,6 +621,13 @@ the shot list.
   a person publishes a verdict.
 - **Whether a real employer's real recruiter is behaving badly.** It checks the offer's claims,
   not people.
+- **An impersonator that outranks a small employer.** The official domain is the knowledge
+  graph's or, without one, the top organic result for the company's name. A scammer whose
+  look-alike site outranks a small genuine employer for its own name would be taken as the
+  official domain.
+- **An employer with no indexed recruitment-fraud notice.** Its notice search finds nothing to
+  quote, so the case stays Unverified after up to 6 searches. That is the app being honest, not
+  a finding about the employer.
 - **Search results change.** Replay mode shows responses recorded on a stated date, not today's.
 
 ## Keys and privacy

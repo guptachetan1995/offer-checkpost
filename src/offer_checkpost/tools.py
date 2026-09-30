@@ -364,13 +364,35 @@ _TOOLS = (
         "find_fraud_notice",
         "Spends one `google` search limited to the employer's official domain (site:<domain>) "
         "with recruitment-fraud terms, and quotes a notice found there, saying whether its "
-        "title or snippet carries a fee phrase such as 'never charge' or 'no fee'. When the "
+        "title or snippet carries a fee phrase such as 'never charge' or 'no fee'. `wording` "
+        "picks the terms: 'specific' (the default) looks for a notice that says the employer "
+        "never asks for a fee or payment; 'broad' looks for a notice by its usual titles "
+        "('recruitment fraud', 'fake job offers', 'recruitment scams', 'fraudulent'). When the "
         "message asked for a fee, a notice with a fee phrase fires fee_contradicts_employer "
         "(strong) and one without fires employer_fraud_notice_exists (weak). Adds a trace "
-        "step and returns it with the signals it added. Does NOT run before "
-        "lookup_official_site has found an official domain (it refuses), or read any page "
-        "outside the official domain as the employer's own statement." + _CHECK_LIMITS,
-        _CASE_ONLY,
+        "step and returns it with the signals it added. Google sometimes ignores site: for a "
+        "narrow query and returns pages of other sites: when no result is on the official "
+        "domain the step is INCONCLUSIVE (its facts say inconclusive: true), fires no signal, "
+        "and is not evidence that the employer has no notice. The investigation planner "
+        "answers that once, with one more search in the 'broad' wording, and a second "
+        "inconclusive result stays inconclusive. Does NOT run before lookup_official_site has "
+        "found an official domain (it refuses), or read any page outside the official domain "
+        "as the employer's own statement, or treat an inconclusive or empty search as proof "
+        "that no notice exists." + _CHECK_LIMITS,
+        obj(
+            {
+                "case_id": CASE_ID,
+                "wording": {
+                    "type": "string",
+                    "enum": ["specific", "broad"],
+                    "description": (
+                        "The search terms: 'specific' (default) or 'broad'. Use 'broad' after "
+                        "a search that came back inconclusive."
+                    ),
+                },
+            },
+            "case_id",
+        ),
         _search_check("find_fraud_notice"),
     ),
     Tool(

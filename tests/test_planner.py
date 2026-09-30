@@ -350,7 +350,7 @@ def with_fee(case):
 
 def test_r2_needs_no_fee_asked_so_a_fee_runs_the_fraud_notice():
     notice = find_fraud_notice_params("contoso.example", "Pune")
-    provider = fake((notice, "google/fraud_notice_no_fee_phrase.json"))
+    provider = fake((notice, "google/fraud_notice_no_fee_phrase_contoso.json"))
     case = with_fee(open_sample("b"))
     investigate(case, provider, max_searches=2, environ=NO_ENV)
 
@@ -440,7 +440,7 @@ def test_a_link_on_the_official_domain_skips_the_fraud_notice_without_a_knowledg
     notice = find_fraud_notice_params("hexavara.example", "Chennai")
     provider = fake(
         (lookup, "google/official_site_organic_only.json"),
-        (notice, "google/fraud_notice_no_fee_phrase.json"),
+        (notice, "google/fraud_notice_no_fee_phrase_hexavara.json"),
     )
     posting = sample_text("walk-in-genuine-shape") + (
         "\nApply at https://careers.hexavara.example/store-supervisor"
@@ -1203,3 +1203,169 @@ def test_a_retrieval_date_rides_on_every_search_signal():
     investigate(case, fake(), environ=NO_ENV)
     when = datetime.fromtimestamp(NOW, UTC).isoformat()
     assert {s["evidence"]["retrievedAt"] for s in case["signals"][1:]} == {when}
+
+
+# ---- a fraud-notice search that says nothing: R3 -------------------------------------------
+
+NOTICE_A = find_fraud_notice_params("brand.example", "Noida")
+NOTICE_A_BROAD = find_fraud_notice_params("brand.example", "Noida", "broad")
+NOTICE_B = find_fraud_notice_params("contoso.example", "Pune")
+NOTICE_B_BROAD = find_fraud_notice_params("contoso.example", "Pune", "broad")
+OFF_DOMAIN = "google/fraud_notice_offdomain.json"
+R3_BECAUSE = (
+    "R3, inconclusive notice search: the first search returned no page from brand.example, so "
+    "try the notice's usual titles"
+)
+
+
+def notice_lines(case):
+    return [x for x in case["trace"] if x["tool"] == "find_fraud_notice"]
+
+
+def test_an_inconclusive_notice_search_is_tried_once_more_in_the_broad_wording():
+    provider = fake((NOTICE_A, OFF_DOMAIN), (NOTICE_A_BROAD, "google/fraud_notice_fee.json"))
+    case = open_sample("a")
+    investigate(case, provider, environ=NO_ENV)
+
+    assert walk(case) == [
+        ("ran", "text_rules", 0, ["fee_requested"], "unverified"),
+        ("ran", "lookup_official_site", 1, ["sender_lookalike"], "unverified"),
+        ("ran", "find_fraud_notice", 2, [], "unverified"),
+        ("ran", "find_fraud_notice", 3, ["fee_contradicts_employer"], "high_risk"),
+        ("stopped", "investigate", None, [], "high_risk"),
+    ]
+    assert provider.calls == sample_calls("a")[:1] + [NOTICE_A, NOTICE_A_BROAD]
+    first, retry = notice_lines(case)
+    assert first["args"] == {"case_id": "case_001"}
+    assert retry["args"] == {"case_id": "case_001", "wording": "broad"}
+    assert first["facts"]["inconclusive"] is True
+    assert retry["facts"]["inconclusive"] is False
+    assert first["note"].startswith("inconclusive: the search returned no page from brand.example")
+    assert first["because"] == "a fee was asked and step 1 named the official domain brand.example"
+    assert retry["because"] == R3_BECAUSE
+    assert retry["params"] == NOTICE_A_BROAD
+    assert case["budget"] == {
+        "maxSearches": 6,
+        "spent": 3,
+        "saved": 3,
+        "stoppedBecause": "decisive",
+    }
+    assert stop(case)["because"].endswith("so 3 searches were not spent")
+
+
+def test_a_search_that_did_return_pages_from_the_domain_but_no_notice_is_not_retried():
+    provider = fake((NOTICE_A, "google/fraud_notice_not_recruitment.json"))
+    case = open_sample("a")
+    investigate(case, provider, max_searches=3, environ=NO_ENV)
+
+    [only_search] = notice_lines(case)
+    assert only_search["facts"]["inconclusive"] is False
+    assert only_search["note"] == (
+        "1 page from brand.example came back, it is not a recruitment-fraud notice"
+    )
+    lookup, _, confirm = sample_calls("a")[:3]
+    assert provider.calls == [lookup, NOTICE_A, confirm]
+    assert case["trace"][3]["tool"] == "confirm_sender_domain"
+
+
+def test_a_second_inconclusive_search_stays_inconclusive_and_is_the_last_one():
+    provider = fake(
+        (NOTICE_B, OFF_DOMAIN), (NOTICE_B_BROAD, OFF_DOMAIN), (NOTICE_B_BROAD, OFF_DOMAIN)
+    )
+    case = with_fee(open_sample("b"))
+    investigate(case, provider, environ=NO_ENV)
+
+    first, retry = notice_lines(case)
+    assert (first["step"], retry["step"]) == (2, 3)
+    assert first["signalsAdded"] == retry["signalsAdded"] == []
+    assert [x["facts"]["inconclusive"] for x in (first, retry)] == [True, True]
+    assert [x["band"] for x in (first, retry)] == ["unverified", "unverified"]
+    assert provider.calls.count(NOTICE_B) == provider.calls.count(NOTICE_B_BROAD) == 1
+    # The plan goes on to the other checks: the notice search is not retried a third time.
+    assert [x["tool"] for x in case["trace"] if x["action"] == "ran"][4:6] == [
+        "check_job_listings",
+        "check_office",
+    ]
+    assert not [s for s in case["signals"] if s["rule"].endswith("fraud_notice_exists")]
+    assert decide(case["signals"]).band != "high_risk"
+
+
+def test_the_retry_counts_against_the_budget_and_never_goes_past_it():
+    provider = fake((NOTICE_A, OFF_DOMAIN), (NOTICE_A_BROAD, OFF_DOMAIN))
+    case = open_sample("a")
+    investigate(case, provider, max_searches=2, environ=NO_ENV)
+
+    assert [x["step"] for x in notice_lines(case)] == [2]
+    assert NOTICE_A_BROAD not in provider.calls
+    assert case["budget"] == {"maxSearches": 2, "spent": 2, "saved": 0, "stoppedBecause": "budget"}
+    assert stop(case)["because"] == "the search budget is spent: 2 of 2"
+
+    case = open_sample("a")
+    investigate(case, provider, max_searches=3, environ=NO_ENV)
+    assert [x["step"] for x in notice_lines(case)] == [2, 3]
+    assert case["budget"] == {"maxSearches": 3, "spent": 3, "saved": 0, "stoppedBecause": "budget"}
+
+
+def test_the_retry_is_a_numbered_search_that_shows_up_in_every_count():
+    provider = fake((NOTICE_A, OFF_DOMAIN), (NOTICE_A_BROAD, OFF_DOMAIN))
+    case = open_sample("a")
+    investigate(case, provider, environ=NO_ENV)
+
+    searched = [x for x in case["trace"] if x["engine"] and x["action"] == "ran"]
+    assert [x["step"] for x in searched] == list(range(1, len(searched) + 1))
+    assert case["budget"]["spent"] == sum(x["searchesSpent"] for x in case["trace"])
+
+
+def test_a_retry_that_fails_stops_the_plan_and_makes_nothing_up():
+    provider = FakeSearchProvider(
+        [(r["params"], r["fixture"]) for r in ROUTES] + [(NOTICE_A, OFF_DOMAIN)],
+        clock=lambda: NOW,
+    )
+    case = open_sample("a")
+    investigate(case, provider, environ=NO_ENV)
+
+    first, retry = notice_lines(case)
+    assert (first["action"], retry["action"]) == ("ran", "failed")
+    assert case["budget"]["stoppedBecause"] == "search_error"
+    assert stop(case)["because"].startswith("find_fraud_notice failed: no fake fixture for")
+    assert not [
+        s for s in case["signals"] if s["source"] == "google" and s["rule"] != "sender_lookalike"
+    ]
+
+
+def test_the_broad_wording_run_on_its_own_supersedes_the_specific_findings():
+    provider = fake((NOTICE_A_BROAD, "google/fraud_notice_no_fee_phrase.json"))
+    case = open_sample("a")
+    investigate(case, provider, environ=NO_ENV)
+    [earlier] = [s for s in case["signals"] if s["rule"] == "fee_contradicts_employer"]
+
+    planner.run_check(
+        case,
+        "find_fraud_notice",
+        {"case_id": "case_001", "wording": "broad"},
+        provider=provider,
+        actor="human",
+    )
+
+    assert earlier["superseded"] == "step 3 ran find_fraud_notice again"
+    [now] = [s for s in case["signals"] if s["rule"] == "employer_fraud_notice_exists"]
+    assert not now.get("superseded")
+
+
+def test_an_inconclusive_rerun_leaves_the_earlier_notice_finding_standing():
+    provider = fake((NOTICE_A_BROAD, OFF_DOMAIN))
+    case = open_sample("a")
+    investigate(case, provider, environ=NO_ENV)
+    [earlier] = [s for s in case["signals"] if s["rule"] == "fee_contradicts_employer"]
+
+    planner.run_check(
+        case,
+        "find_fraud_notice",
+        {"case_id": "case_001", "wording": "broad"},
+        provider=provider,
+        actor="human",
+    )
+
+    assert not earlier.get("superseded")
+    assert decide(case["signals"]).band == "high_risk"
+    assert notice_lines(case)[-1]["facts"]["inconclusive"] is True

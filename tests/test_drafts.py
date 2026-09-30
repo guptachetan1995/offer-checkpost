@@ -291,7 +291,7 @@ def test_a_verdict_cites_the_fee_and_the_employers_own_notice_with_four_searches
         "Also found:",
         "- look-alike sender domain (step 1, lookup_official_site on google): the recruiter's "
         "email is on brand-careers.example, not brand.example: 'brand-careers' contains the "
-        "brand token 'brand'. Source: \"Brand\" · https://www.brand.example/ "
+        "brand token 'brand'. Official domain taken from: \"Brand\" · https://www.brand.example/ "
         "(retrieved 3 Oct 2026)",
         "Searches: 2 spent, 4 not spent: the evidence was decisive.",
     ]

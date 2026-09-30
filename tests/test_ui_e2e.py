@@ -36,8 +36,15 @@ from pathlib import Path
 import pytest
 
 from offer_checkpost import drafts
+from offer_checkpost.checks import find_fraud_notice_params
 from offer_checkpost.invoke import invoke
-from offer_checkpost.providers import FakeSearchProvider, ReplaySearchProvider, write_recording
+from offer_checkpost.providers import (
+    FIXTURES_DIR,
+    ROUTES_FILE,
+    FakeSearchProvider,
+    ReplaySearchProvider,
+    write_recording,
+)
 from offer_checkpost.rules import RULES
 from offer_checkpost.server import SESSION_HEADER, make_server
 from offer_checkpost.store import Store
@@ -49,7 +56,8 @@ SAMPLES = ENTRY / "samples" / "offers"
 SAMPLE_A = SAMPLES / "a.txt"
 # The synthetic stand-ins of the demo samples, which the fake provider's fixtures answer.
 STAND_INS = ENTRY / "tests" / "fixtures" / "offers"
-RECORDED = "29 Sep 2026"
+ROUTES = json.loads((FIXTURES_DIR / ROUTES_FILE).read_text("utf-8"))
+RECORDED_DAYS = "29 Sep 2026 and 30 Sep 2026"
 
 # The clicks in the walk below, each a person's; the planner's checks inside investigate are
 # the agent's.
@@ -240,9 +248,9 @@ def test_paste_confirm_investigate_publish_in_chrome(app, browser):
     assert page.evaluate("[location.hash, sessionStorage.getItem('session')]") == ["", session.key]
     page.wait_for_selector("#sample-wrap:not([hidden])")
     assert page.inner_text("#bind") == store.server["bind"]
-    assert page.inner_text("#provider") == f"Replay: recorded {RECORDED}, not live"
+    assert page.inner_text("#provider") == f"Replay: recorded {RECORDED_DAYS}, not live"
     assert page.inner_text("#replay").startswith(
-        f"Replaying SerpApi responses recorded on {RECORDED}, not live."
+        f"Replaying SerpApi responses recorded on {RECORDED_DAYS}, not live."
     )
 
     page.select_option("#sample", "a")
@@ -267,8 +275,8 @@ def test_paste_confirm_investigate_publish_in_chrome(app, browser):
     assert any("fee was asked" in line for line in because), because
     # The employer's own notice, as SerpApi returned it on the day it was recorded.
     evidence = page.inner_text("#evidence")
-    assert "we never ask for recruitment fees" in evidence, evidence
-    assert "freshers.hcltech.com" in evidence, evidence
+    assert "will never ask for any payment of money" in evidence, evidence
+    assert "hcltech.com/de-de/careers/genuine-job-offers" in evidence, evidence
 
     page.select_option("#pub-label", "likely_impersonation")
     page.fill("#pub-note", "Do not pay the fee.")
@@ -352,6 +360,37 @@ def opened(browser, server, *, width=1280, height=720):
 def pick(page, case_id):
     page.click(f"[data-focus=case-{case_id}]")
     page.wait_for_selector(f"#case-h:text('{case_id}'), .case-meta:has-text('{case_id}')")
+
+
+@pytest.mark.e2e
+@pytest.mark.loopback
+def test_a_notice_search_that_returned_nothing_from_the_domain_says_so_in_the_trace_and_evidence(
+    browser,
+):
+    routes = [(r["params"], r["fixture"]) for r in ROUTES]
+    for wording in ("specific", "broad"):
+        params = find_fraud_notice_params("brand.example", "Noida", wording)
+        routes.append((params, "google/fraud_notice_offdomain.json"))
+    store = Store(FakeSearchProvider(routes))
+    case_id = investigated(store, "a", samples=STAND_INS)
+    with serving(store) as server:
+        page, problems = opened(browser, server)
+
+        rows = page.locator("#trace .trace-row", has_text="find_fraud_notice")
+        assert rows.count() == 2
+        assert "usual titles" in rows.nth(1).inner_text()
+        for n in range(2):
+            note = rows.nth(n).locator(".note")
+            assert note.locator("strong").inner_text().strip() == "Inconclusive:"
+            assert "returned no page from brand.example" in note.inner_text()
+            assert "so it says nothing about a notice" in note.inner_text()
+        assert "no recruitment-fraud notice" not in page.inner_text("#trace")
+        section = page.locator("#evidence h3", has_text="Inconclusive")
+        assert section.count() == 1
+        listed = page.locator("#evidence .not-counted.inconclusive li").all_inner_texts()
+        assert len(listed) == 1 and "says nothing about whether brand.example" in listed[0]
+        assert "no recruitment-fraud notice" not in page.inner_text("#evidence")
+        assert case_id in store.cases and problems == []
 
 
 @pytest.mark.e2e

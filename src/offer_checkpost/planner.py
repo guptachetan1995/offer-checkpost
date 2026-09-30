@@ -6,7 +6,8 @@ the web. After step 1 the checks run in this base order, each only while its con
 
     a  find_fraud_notice        an official domain is known, and a fee was asked, sensitive
                                 documents were asked for, or the recruiter's email or link is
-                                off the official domain
+                                off the official domain; a search that returns no page from
+                                that domain is inconclusive, and runs once more (R3)
     b  confirm_sender_domain    sender_lookalike fired; one search per look-alike, at most 2
     c  check_job_listings       a role is claimed
     d  check_office             a city is claimed
@@ -20,6 +21,14 @@ Two reorder rules read step 1's result. R1, unknown firm: no_web_footprint fired
 domain was found, so check_office runs before check_job_listings. R2, official sender:
 sender_official fired and no fee was asked, so find_fraud_notice is skipped and
 check_job_listings runs first.
+
+R3, inconclusive notice search: Google sometimes drops ``site:`` for a narrow query
+and answers with pages of other sites, so a first ``find_fraud_notice`` that returned no page from
+the official domain is not "no notice". While its own conditions still hold and the budget lasts,
+the planner runs it once more with ``wording: "broad"`` (the notice's usual titles). One retry, no
+more: a second search with no page from the domain stays inconclusive, with no signal and the band
+unchanged; a first search that did return pages from the domain but no notice is a finding and is
+not retried. The retry is a numbered search like any other and counts against the budget.
 
 Before every search the planner stops at the first of: the band is already ``high_risk`` and no
 search left can change it (decisive, judged from step 1 on); the case's search budget is
@@ -44,8 +53,8 @@ same keys:
     step           the search's number (0 for the text rules); None on a line that ran none
     tool           the check, "text_rules", or the verb that stopped ("investigate",
                    "run_remaining_checks")
-    args           the check's tool args (case_id and any domain, term or contact_index), or
-                   None
+    args           the check's tool args (case_id and any domain, term, contact_index or
+                   wording), or None
     actor          "agent" for the planner's own calls, "human" for checks a person asked for
     action         "ran" | "failed" | "skipped" | "reordered" | "stopped" | "reused"
     because        why, in one line a person can read
@@ -137,6 +146,10 @@ UNCONFIRMED = (
 )
 R1 = "R1, unknown firm"
 R2 = "R2, official sender"
+R3_RETRY = (
+    "R3, inconclusive notice search: the first search returned no page from {domain}, so try "
+    "the notice's usual titles"
+)
 R2_SKIP = (
     f"{R2}: the sender is on the official domain and asks for no fee, so there is nothing for "
     "a fraud notice to contradict"
@@ -207,7 +220,8 @@ def run_check(
     args) fired are superseded by this run's. A search the provider can't serve is recorded as
     a ``failed`` line with the provider's fixed message, and its ``SearchError`` is raised
     again, so a caller hears of it; nothing is made up in its place, and the earlier run's
-    findings stand. Raises ``PlanRefused`` when the check can't run yet
+    findings stand. A run whose reading is inconclusive says as little as a failed one, so it
+    supersedes nothing either. Raises ``PlanRefused`` when the check can't run yet
     (``find_fraud_notice`` before an official domain is known, ``scan_office_reviews`` without
     a place_id) or would search something the offer didn't supply (a domain not extracted
     from it, a synthetic contact). It applies no stop rule: the planner does that between
@@ -232,7 +246,8 @@ def run_check(
         )
         raise
     reading = read(result.data, params=result.params, retrieved_at=result.retrieved_at)
-    _supersede(_found_by(case, tool, args), f"step {step} ran {tool} again")
+    if not reading.facts.get("inconclusive"):
+        _supersede(_found_by(case, tool, args), f"step {step} ran {tool} again")
     added = _add(case, reading.signals)
     budget = _budget(case)
     budget["spent"] += result.searches_spent
@@ -310,7 +325,10 @@ def _prepare_lookup(case: Case, args: Mapping[str, Any]):
 
 def _prepare_fraud_notice(case: Case, args: Mapping[str, Any]):
     official = _official_or_refuse(case, "find_fraud_notice")
-    return checks.find_fraud_notice_params(official, _value(case["claims"], "city")), partial(
+    params = checks.find_fraud_notice_params(
+        official, _value(case["claims"], "city"), args.get("wording", "specific")
+    )
+    return params, partial(
         checks.read_fraud_notice,
         official_domain=official,
         fee_requested=_fired(case, "fee_requested"),
@@ -596,6 +614,12 @@ def _walk(run: _Run, ctx: _Context) -> Stop:
         line = run.call(tool, extra, because)
         if line["action"] == "failed":
             return _failed(line)
+        if tool == "find_fraud_notice" and _inconclusive(line):
+            if stop := _guard(run, ctx):
+                return stop
+            retry = run.call(tool, {"wording": "broad"}, R3_RETRY.format(domain=ctx.official))
+            if retry["action"] == "failed":
+                return _failed(retry)
     if run.decisive:
         return "done", "every check has run or been skipped", 0
     return "done", "every check the decisive stop skipped has run or been skipped", 0
@@ -1021,7 +1045,29 @@ def _latest_current(case: Case, tool: str) -> Line | None:
 
 
 def _identity(tool: str, args: Mapping[str, Any]) -> tuple:
-    return tool, tuple(sorted((k, v) for k, v in args.items() if k != "case_id"))
+    # A wording is another way to ask the same check, so a run in either wording is the same
+    # check: it supersedes the other's findings and counts as done.
+    return tool, tuple(sorted((k, v) for k, v in args.items() if k not in ("case_id", "wording")))
+
+
+def _inconclusive(line: Line) -> bool:
+    return line["action"] == "ran" and bool((line["facts"] or {}).get("inconclusive"))
+
+
+def inconclusive_notice_search(case: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The fraud-notice search of the latest investigation, when its last run returned no page
+    from the official domain: ``{"steps", "official"}`` with every such run's step number, or
+    None. A drafted verdict says so instead of leaving the search out, since no signal marks
+    it."""
+    runs = [
+        line
+        for line in _current(case)
+        if line["tool"] == "find_fraud_notice" and line["action"] == "ran"
+    ]
+    if not runs or not _inconclusive(runs[-1]):
+        return None
+    official = _official(case)
+    return {"steps": [line["step"] for line in runs if _inconclusive(line)], "official": official}
 
 
 def _rules(case: Case, line: Line) -> set[str]:

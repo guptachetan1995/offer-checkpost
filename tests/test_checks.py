@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from offer_checkpost.checks import (
+    FRAUD_NOTICE_TERMS,
+    FRAUD_NOTICE_WORDINGS,
     GOOGLE_INDIA,
     MAPS_ZOOM,
     RESTRICTORS,
@@ -206,6 +208,49 @@ def test_site_searches_are_scoped_to_the_official_domain():
     assert find_fraud_notice_params("brand.example")["q"].startswith("site:brand.example ")
     confirm = confirm_sender_domain_params("brand.example", "hr.onboarding@brand-careers.example")
     assert confirm["q"] == 'site:brand.example "brand-careers.example"'
+
+
+def test_the_fraud_notice_query_keeps_its_or_groups_parenthesised_and_site_scoped():
+    q = find_fraud_notice_params("brand.example")["q"]
+    assert q == f"site:brand.example {FRAUD_NOTICE_TERMS}"
+    # An OR outside parentheses would split the query, and site: would scope only its first
+    # operand.
+    assert re.sub(r"\([^()]*\)", "", FRAUD_NOTICE_TERMS).split() == ["never"]
+    assert re.findall(r"\(([^()]*)\)", FRAUD_NOTICE_TERMS) == [
+        "recruitment OR hiring",
+        "fraud OR scam OR fake",
+        "fee OR money OR payment",
+    ]
+
+
+def test_the_broad_fraud_notice_wording_asks_for_a_notices_usual_titles():
+    params = find_fraud_notice_params("brand.example", "Noida", "broad")
+    assert params["q"] == (
+        'site:brand.example ("recruitment fraud" OR "fake job offers" OR "recruitment scams" '
+        'OR "fraudulent")'
+    )
+    assert params["q"] != find_fraud_notice_params("brand.example", "Noida")["q"]
+    assert {k: v for k, v in params.items() if k != "q"} == {
+        k: v for k, v in find_fraud_notice_params("brand.example", "Noida").items() if k != "q"
+    }
+
+
+@pytest.mark.parametrize("wording", sorted(FRAUD_NOTICE_WORDINGS))
+def test_every_fraud_notice_wording_is_one_parenthesised_group_set_after_site(wording):
+    terms = FRAUD_NOTICE_WORDINGS[wording]
+    q = find_fraud_notice_params("brand.example", None, wording)["q"]
+    assert q == f"site:brand.example {terms}"
+    # Every OR sits inside a group, so site: scopes the whole query and not its first operand.
+    assert " OR " not in re.sub(r"\([^()]*\)", "", terms)
+    assert re.sub(r"\([^()]*\)", "", terms).split() in ([], ["never"])
+    assert terms.count("(") == terms.count(")") >= 1
+
+
+def test_the_default_wording_is_the_specific_one():
+    assert find_fraud_notice_params("brand.example") == find_fraud_notice_params(
+        "brand.example", None, "specific"
+    )
+    assert FRAUD_NOTICE_TERMS == FRAUD_NOTICE_WORDINGS["specific"]
 
 
 def test_contact_footprint_searches_the_exact_contact():
@@ -586,7 +631,10 @@ def test_a_fraud_page_about_something_other_than_recruitment_is_not_a_notice():
     reading = fraud_notice("google/fraud_notice_not_recruitment.json")
     assert rules_of(reading) == []
     assert reading.facts["notice"] is None
-    assert reading.note == "no recruitment-fraud notice on brand.example"
+    assert reading.note == (
+        "1 page from brand.example came back, it is not a recruitment-fraud notice"
+    )
+    assert reading.facts["inconclusive"] is False
 
 
 def test_a_bank_page_on_fake_loan_or_deposit_offers_is_not_a_recruitment_notice():
@@ -614,11 +662,98 @@ def test_a_third_party_page_is_never_the_employers_notice():
     response = fixture("google/fraud_notice_fee.json")
     for result in response["organic_results"]:
         result["link"] = result["link"].replace("careers.brand.example", "news.example")
-    assert rules_of(fraud_notice(response)) == []
+    reading = fraud_notice(response)
+    assert rules_of(reading) == []
+    assert reading.facts["notice"] is None
 
 
-def test_no_results_means_no_notice():
-    assert rules_of(fraud_notice({})) == []
+def test_a_search_with_no_page_from_the_official_domain_is_inconclusive_not_no_notice():
+    # Google dropped site: and answered with pages of other sites, one of which is about
+    # recruitment fraud and carries a fee phrase. That says nothing about brand.example.
+    reading = fraud_notice("google/fraud_notice_offdomain.json")
+    assert rules_of(reading) == []
+    assert reading.facts["inconclusive"] is True
+    assert (reading.facts["results"], reading.facts["onDomain"]) == (3, 0)
+    assert reading.facts["notice"] is None
+    assert reading.note == (
+        "inconclusive: the search returned no page from brand.example (3 results, all "
+        "elsewhere), so it says nothing about a notice"
+    )
+    assert "no recruitment-fraud notice" not in reading.note
+
+
+def test_an_inconclusive_search_fires_nothing_even_when_a_fee_was_asked():
+    assert rules_of(fraud_notice("google/fraud_notice_offdomain.json", fee_requested=True)) == []
+
+
+def test_no_results_at_all_is_inconclusive_too():
+    reading = fraud_notice({})
+    assert rules_of(reading) == []
+    assert reading.facts["inconclusive"] is True
+    assert reading.note == (
+        "inconclusive: the search returned no page from brand.example (no results at all), so "
+        "it says nothing about a notice"
+    )
+
+
+def test_pages_from_the_domain_and_no_notice_is_a_finding_worded_as_what_came_back():
+    response = fixture("google/fraud_notice_not_recruitment.json")
+    response["organic_results"].append(
+        {"title": "Careers | Brand", "link": "https://careers.brand.example/", "snippet": "Roles."}
+    )
+    response["organic_results"].append(
+        fixture("google/fraud_notice_offdomain.json")["organic_results"][0]
+    )
+    reading = fraud_notice(response)
+    assert rules_of(reading) == []
+    assert (reading.facts["results"], reading.facts["onDomain"]) == (3, 2)
+    assert reading.facts["inconclusive"] is False
+    assert reading.note == (
+        "2 pages from brand.example came back, none is a recruitment-fraud notice"
+    )
+
+
+def test_one_page_from_the_domain_is_enough_to_make_the_search_conclusive():
+    response = fixture("google/fraud_notice_offdomain.json")
+    response["organic_results"].append(
+        {"title": "About | Brand", "link": "https://www.brand.example/about", "snippet": "Us."}
+    )
+    reading = fraud_notice(response)
+    assert reading.facts["inconclusive"] is False
+    assert reading.facts["notice"] is None
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "fee_requested", "rules", "inconclusive"),
+    [
+        ("google/fraud_notice_fee.json", True, ["fee_contradicts_employer"], False),
+        ("google/fraud_notice_fee.json", False, [], False),
+        ("google/fraud_notice_no_fee_phrase.json", True, ["employer_fraud_notice_exists"], False),
+        ("google/fraud_notice_no_fee_phrase.json", False, [], False),
+        ("google/fraud_notice_offdomain.json", True, [], True),
+        ("google/fraud_notice_offdomain.json", False, [], True),
+    ],
+)
+def test_the_three_outcomes_by_fee_asked_or_not(fixture_name, fee_requested, rules, inconclusive):
+    reading = fraud_notice(fixture_name, fee_requested=fee_requested)
+    assert rules_of(reading) == rules
+    assert reading.facts["inconclusive"] is inconclusive
+    assert (reading.facts["notice"] is not None) is (
+        fixture_name.endswith(("_fee.json", "_phrase.json"))
+    )
+
+
+def test_a_notice_reads_the_same_in_either_wording():
+    for wording in FRAUD_NOTICE_WORDINGS:
+        reading = read_fraud_notice(
+            fixture("google/fraud_notice_fee.json"),
+            params=find_fraud_notice_params("brand.example", "Noida", wording),
+            retrieved_at=AT,
+            official_domain="brand.example",
+            fee_requested=True,
+        )
+        assert rules_of(reading) == ["fee_contradicts_employer"]
+        assert reading.facts["inconclusive"] is False
 
 
 # ---- google: confirm_sender_domain --------------------------------------------------------

@@ -1,0 +1,20 @@
+{
+  "_synthetic": "Synthetic fixture, not a real SerpApi response: invented results shaped like a google response trimmed by json_restrictor to knowledge_graph.{title,website} and organic_results[].{title,link,snippet}. Every name, domain and place in it is fictional. It models Google dropping the site: restriction: no result is on the employer's domain.",
+  "organic_results": [
+    {
+      "title": "Fraud | Encyclopedia of Terms",
+      "link": "https://terms.example/fraud",
+      "snippet": "Fraud is a deliberate deception made for personal gain or to damage another party."
+    },
+    {
+      "title": "Recruitment fraud: how to spot a fake job offer | Career Safety Guide",
+      "link": "https://careersafety.example/recruitment-fraud",
+      "snippet": "A genuine employer never charges a fee to apply. Scam recruiters ask for money before an interview."
+    },
+    {
+      "title": "Job scams and how to avoid them | Consumer Notes",
+      "link": "https://consumernotes.example/job-scams",
+      "snippet": "Fake hiring messages promise easy pay. Never send money to a recruiter."
+    }
+  ]
+}

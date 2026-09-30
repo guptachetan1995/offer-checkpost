@@ -36,11 +36,12 @@ from test_no_secrets import key_shaped, personal_data
 
 ENTRY = Path(__file__).resolve().parents[1]
 SAMPLES = ENTRY / "samples" / "offers"
-RECORDED_ON = "2026-09-29"
+RECORDED_ON = {"a": "2026-09-30", "b": "2026-09-29", "c": "2026-09-29"}
 RECORDINGS = sorted(RECORDINGS_DIR.glob("*/*.json"))
 # Keys that would identify a person: a reviewer, or a profile picture.
 PERSON_KEYS = {"user", "profile", "thumbnail", "contributor_id"}
-AT = f"{RECORDED_ON}T12:00:00+05:30"
+AT = "2026-09-29T12:00:00+05:30"
+AT_A = "2026-09-30T12:00:00+05:30"
 REPLAYED = "(replay, cache replay) · 1 search · agent"
 ASKED = "(replay, cache replay) · 1 search · human"
 
@@ -92,18 +93,17 @@ def all_links(node) -> list[str]:
 # ---- the demo, replayed ---------------------------------------------------------------------
 
 
-def test_the_recordings_are_the_three_demo_samples_recorded_on_one_day():
+def test_the_recordings_are_the_three_demo_samples_recorded_on_two_days():
     assert sorted({p.parent.name for p in RECORDINGS}) == ["a", "b", "c"]
     assert [p.parent.name for p in RECORDINGS].count("a") == 6
     assert [p.parent.name for p in RECORDINGS].count("b") == 4
     assert [p.parent.name for p in RECORDINGS].count("c") == 4
-    assert ReplaySearchProvider().recorded_dates == (RECORDED_ON,)
+    assert ReplaySearchProvider().recorded_dates == ("2026-09-29", "2026-09-30")
     notice = " ".join((RECORDINGS_DIR / "NOTICE.md").read_text(encoding="utf-8").split())
     for says in (
         "not covered by this repository's MIT licence",
         "Results that tend to name people are dropped",
-        # The one search the app's 20 s timeout of the day could not have fetched.
-        "sent with a longer client timeout, and with `no_cache`",
+        "`record` ran Sample A live itself: all six of its searches",
     ):
         assert says in notice, says
 
@@ -113,7 +113,8 @@ def test_sample_a_replays_to_high_risk_on_hcltechs_own_notice(capsys, no_network
 
     assert (code, err) == (0, "")
     assert out.split("\n")[0].endswith(
-        "a.txt · provider replay (recorded SerpApi responses: 2026-09-29; not live) · as human"
+        "a.txt · provider replay (recorded SerpApi responses: 2026-09-29, 2026-09-30; not live)"
+        " · as human"
     )
     assert headings(out) == [
         "step 0   text_rules · agent",
@@ -127,7 +128,7 @@ def test_sample_a_replays_to_high_risk_on_hcltechs_own_notice(capsys, no_network
         "found official domain hcltech.com (top organic result); recruiter domains: "
         "hcltech-careers.example lookalike",
         "signal sig_2 sender_lookalike (red, moderate)",
-        'found hcltech.com has a recruitment-fraud notice: "never ask for recruitment fees"',
+        'found hcltech.com has a recruitment-fraud notice: "never ask for any payment"',
         "signal sig_3 fee_contradicts_employer (red, strong)",
     ):
         assert says in trace, says
@@ -136,8 +137,11 @@ def test_sample_a_replays_to_high_risk_on_hcltechs_own_notice(capsys, no_network
         " ".join(section(out, "Draft verdict (a draft: only a person publishes)")).split()
     )
     # The employer's own words, quoted from its own site, dated when SerpApi returned them.
-    assert "https://freshers.hcltech.com/ (retrieved 29 Sep 2026)" in verdict
-    assert "we never ask for recruitment fees" in verdict
+    assert (
+        "https://www.hcltech.com/de-de/careers/genuine-job-offers (retrieved 30 Sep 2026)"
+        in verdict
+    )
+    assert "will never ask for any payment of money" in verdict
     assert verdict.endswith("Searches: 2 spent, 4 not spent: the evidence was decisive.")
     assert no_network == []
 
@@ -380,15 +384,15 @@ def test_sample_as_fraud_notice_search_quotes_the_fee_phrase_from_hcltechs_own_s
     # site: was honoured: every result is on the official domain, with a title and snippet.
     assert all(registrable_domain(r["link"]) == "hcltech.com" for r in organic)
     assert all(r.get("title") and r.get("snippet") for r in organic)
-    # The first result carrying the fee phrase is the one quoted; the notice page above it
-    # names no fee in its snippet.
-    quoted = next(r for r in organic if "never ask for recruitment fees" in r["snippet"])
-    assert quoted["link"] == "https://freshers.hcltech.com/"
+    # The top result is HCLTech's own notice, and its snippet carries the fee phrase.
+    quoted = organic[0]
+    assert quoted["link"] == "https://www.hcltech.com/de-de/careers/genuine-job-offers"
+    assert "will never ask for any payment of money" in quoted["snippet"]
 
     reading = read_fraud_notice(
         record["response"],
         params=record["params"],
-        retrieved_at=AT,
+        retrieved_at=AT_A,
         official_domain="hcltech.com",
         fee_requested=True,
     )
@@ -469,7 +473,7 @@ def test_the_maps_searches_carry_places_with_ids_and_addresses():
     # scoped to that place: filtered on "fee", it comes back empty.
     a = recording("a", "google_maps", "HCLTech")
     reading = read_office(
-        a["response"], params=a["params"], retrieved_at=AT, company="HCLTech", city="Noida"
+        a["response"], params=a["params"], retrieved_at=AT_A, company="HCLTech", city="Noida"
     )
     [signal] = reading.signals
     assert signal["rule"] == "office_found"
@@ -527,7 +531,7 @@ def test_every_recording_is_scrubbed_and_dated(path):
     assert path.name == f"{engine}-{cache_key(params)[:12]}.json"
     when = datetime.fromisoformat(record["recordedAt"])
     assert when.utcoffset() == timedelta(hours=5, minutes=30)
-    assert record["recordedAt"].startswith(RECORDED_ON)
+    assert record["recordedAt"].startswith(RECORDED_ON[path.parent.name])
 
     # Scrubbing it again changes nothing: only the reader's fields, cleaned.
     assert scrub(engine, response) == response

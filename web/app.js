@@ -875,7 +875,7 @@ function caseTitle(c) {
 
 function parseSummary(summary) {
   const lines = String(summary || '').split('\n');
-  const out = { also: [], notCounted: [] };
+  const out = { also: [], notCounted: [], inconclusive: [] };
   let section = null;
   for (const line of lines.slice(1)) {
     if (line === 'Evidence:') section = 'evidence';
@@ -883,6 +883,7 @@ function parseSummary(summary) {
     else if (line.startsWith('- ')) {
       if (section === 'also') out.also.push(line.slice(2));
     } else if (line.startsWith('Not counted: ')) out.notCounted.push(line.slice(13));
+    else if (line.startsWith('Inconclusive: ')) out.inconclusive.push(line.slice(14));
   }
   return out;
 }
@@ -995,7 +996,7 @@ function renderHeader() {
   badge.textContent =
     server.provider === 'replay'
       ? recorded.length
-        ? `Replay: recorded ${recorded[recorded.length - 1]}, not live`
+        ? `Replay: recorded ${listed(recorded)}, not live`
         : 'Replay: nothing recorded yet'
       : provider.text;
   badge.className = ['badge', 'provider', provider.cls].filter(Boolean).join(' ');
@@ -1511,6 +1512,7 @@ function budgetLine(c) {
 function traceRow(c, line, sig, index, animate) {
   const numbered = line.step != null;
   const failed = line.action === 'failed';
+  const unsure = line.facts?.inconclusive === true;
   const searched = !!line.engine && line.cache != null;
   const tag = numbered ? String(line.step) : ACTION_TAG[line.action] ?? line.action;
   const name = numbered ? `Step ${line.step}${failed ? ', failed' : ''}` : ACTION_NAME[line.action] ?? line.action;
@@ -1544,7 +1546,7 @@ function traceRow(c, line, sig, index, animate) {
       h('p', { class: 'because' }, sentence(line.because)),
       h('p', { class: 'meta' }, meta),
       query ? h('p', { class: 'query' }, h('span', { class: 'q' }, 'q'), ' ', query) : null,
-      line.note ? h('p', { class: ['note', failed && 'failed'] }, h('strong', {}, failed ? 'Failed: ' : 'Found: '), line.note) : null,
+      line.note ? h('p', { class: ['note', failed && 'failed', unsure && 'inconclusive'] }, h('strong', {}, failed ? 'Failed: ' : unsure ? 'Inconclusive: ' : 'Found: '), unsure ? line.note.replace(/^inconclusive: /, '') : line.note) : null,
       signals.length
         ? h(
             'ul',
@@ -1630,6 +1632,10 @@ function cardRemaining(c) {
   );
 }
 
+// A sender rule's card shows the result the official domain was read from, not evidence about
+// the sender: the source line says so.
+const ANCHORED_RULES = new Set(['sender_lookalike', 'sender_free_mail', 'sender_official']);
+
 function evidenceCard(c, s, compact) {
   const e = s.evidence || {};
   const fromText = s.source === 'text';
@@ -1638,6 +1644,7 @@ function evidenceCard(c, s, compact) {
   const source = fromText
     ? null
     : [
+        ANCHORED_RULES.has(s.rule) ? 'Official domain taken from ' : null,
         safeLink(e.link) ?? h('span', {}, `${e.engine} search “${e.query}”`),
         e.date ? ` · dated ${e.date}` : null,
         e.retrievedAt ? ` · retrieved ${day(e.retrievedAt)}` : null,
@@ -1704,6 +1711,12 @@ function cardEvidence(c) {
       : null,
     parts.notCounted.length
       ? [h('h3', {}, 'Not counted'), h('ul', { class: 'not-counted' }, parts.notCounted.map((t) => h('li', {}, t)))]
+      : null,
+    parts.inconclusive.length
+      ? [
+          h('h3', {}, 'Inconclusive'),
+          h('ul', { class: 'not-counted inconclusive' }, parts.inconclusive.map((t) => h('li', {}, t))),
+        ]
       : null,
     disclosure(
       `full:${c.id}`,
@@ -1910,7 +1923,9 @@ function cardPublish(c) {
           ? h(
               'p',
               { class: 'fine', id: 'pub-label-hint' },
-              `${band === 'consistent_with_genuine' ? 'The draft verdict says nothing found contradicts the offer' : `The draft verdict is ${BANDS[band].title.toLowerCase()}`}. A label that says more than the checks found is not offered.`,
+              band === 'consistent_with_genuine'
+                ? 'The draft verdict says nothing found contradicts the offer. A red-flag label is not offered on it.'
+                : `The draft verdict is ${BANDS[band].title.toLowerCase()}. "No contradictions found" is not offered on it; a red-flag label is your call.`,
             )
           : null,
       ),
