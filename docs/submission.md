@@ -35,8 +35,10 @@ without signing in).
 
 ## Demo video
 
-Added once it's uploaded: a screen recording under three minutes of the project running
-locally, checked in a private browser window.
+https://youtu.be/U2miyMG0eZY
+
+A screen recording (2:30) of the app running locally on live SerpApi, on YouTube as Public;
+it opens without signing in.
 
 ## Project description (max 4,000 characters)
 

@@ -16,6 +16,8 @@ Google Jobs, and a real office shows up on Google Maps.
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
+**Demo video (2:30, recorded on live SerpApi):** <https://youtu.be/U2miyMG0eZY>
+
 Per-message checkers and 0-100 scorers judge each forward alone and return a number. Offer
 Checkpost answers the whole batch and returns quoted, linked search results about each claim;
 its best band is "No contradictions found", never a score.
