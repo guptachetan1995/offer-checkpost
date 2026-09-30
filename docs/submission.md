@@ -92,8 +92,8 @@ PRIVACY: the searches carry the claimed company, role and city and the official 
 recruiter's domain or contact only when one is being checked. The candidate's own details are
 never sent.
 
-Runs locally: Python, on SerpApi's official client. Judges can run it with their own SerpApi
-key, or with no key in replay mode, which serves the three demo samples' real SerpApi
+Runs locally in Python. Judges can run it with their own key or in keyless replay mode, which
+serves the three demo samples' real SerpApi
 responses, recorded on 29 and 30 September 2026 and labelled with those dates.
 
 ## How the project uses SerpApi (max 4,000 characters)
@@ -129,17 +129,16 @@ only the fields the app reads:
 - Google News (gl=in, hl=en): reads news_results[].title, link and source for reports of fake
   offers made in the company's name.
 - Account API (free): searches left this month, shown in the header and used by a quota guard
-  that keeps a monthly reserve.
+  with a monthly reserve.
 
-Two checks run only when the evidence calls for them: Google Maps Reviews with its query
+Two checks run only when needed: Google Maps Reviews with its query
 filter reads reviews[].snippet at a found office when a fee was asked or no listing matched
 (never the reviewer), and an exact-phrase Google search looks for a real recruiter phone or
 email next to scam reports.
 
 Why it's used this way: the next search depends on what the earlier ones found. With no
 official domain there is no site: search and the office is checked first; with the sender on
-the official domain and no fee asked, the fraud-notice search is skipped; with no Maps place
-there is no reviews query. The planner stops when the evidence is decisive, and its trace shows every call, why it ran and the searches saved.
+the official domain and no fee asked, the fraud-notice search is skipped. The planner stops when the evidence is decisive, and its trace shows every call, why it ran and the searches saved.
 In replay, HCLTech stops at 2 of its 6 searches (4 more if a person asks), the unknown firm
 at 2 (2 more if asked), and Siemens takes 4. In the live video (30 Sep 2026, 16:00 IST), the
 site: search found HCLTech's own notice: 2 searches, high risk, 4 not spent, and the same offer

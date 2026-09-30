@@ -16,91 +16,83 @@ Google Jobs, and a real office shows up on Google Maps.
 Built for the [SerpApi India Hackathon 2026](https://serpapi.github.io/serpapi-india-hackathon-2026/),
 in the **Knowledge & Public Interest** track.
 
+Per-message checkers and 0-100 scorers judge each forward alone and return a number. Offer
+Checkpost answers the whole batch and returns quoted, linked search results about each claim;
+its best band is "No contradictions found", never a score.
+
+| Differentiator | What you see | Where it is proven |
+|---|---|---|
+| **One check answers the batch** | A forward that makes the same claims as one already checked runs at 0 searches while the app runs, and the trace names the case it reused. | [Video script](docs/video-script.md) beat 5; `test_a_forwarded_copy_is_answered_from_the_first_check_at_zero_searches` (`tests/test_gate.py`), `test_the_fingerprint_ignores_case_spacing_and_legal_suffixes` (`tests/test_planner.py`) |
+| **The proof is the employer's own words** | When a fee is asked, HCLTech's own recruitment-fraud notice ("never ask for any payment"), quoted with its link after 2 searches. | Beat 3; `test_sample_as_fraud_notice_search_quotes_the_fee_phrase_from_hcltechs_own_site` (`tests/test_recordings.py`) |
+| **An agent cannot publish through the app's tools, API or MCP adapter** | A scripted MCP client's `publish_verdict` call is refused, and the activity log shows a REFUSED row. | Beat 10; `test_each_human_only_verb_is_refused_for_the_agent_and_changes_nothing` (`tests/test_server_http.py`), `test_a_human_only_verb_is_a_tool_error_carrying_the_apps_refusal_logged_as_the_agents` (`tests/test_mcp.py`) |
+
 ![The evidence card quoting HCLTech's own notice, with its link and the two live searches that found it](docs/img/evidence-employer-notice.jpg)
 
-*Frame from the recorded demo (live SerpApi, 30 September 16:00 IST): the employer's own
-notice, quoted with its link, after two searches.*
+*Frame from the recorded demo (live SerpApi, 30 September 16:00 IST): the employer's own notice.*
 
-**How this differs from a 0-100 scam-score checker:**
-- **One check answers the batch.** A forward that makes the same claims as one already
-  checked is answered at 0 searches, and the trace names the case it reused.
-- **The proof is the employer's own words.** When a fee is asked, it looks for the employer's
-  own recruitment-fraud notice on its official domain and quotes it with the link.
-- **An agent cannot publish, through the app's tools, API or MCP adapter.** The agent's tools and the person's verbs are separate
-  lists, and an MCP client that tries to publish a verdict is refused and logged.
+**Honest about live runs:** the flagship search's results move with Google's ranking. The demo
+video's live run found HCLTech's notice at search 2; other runs sometimes don't and end
+Unverified, which is correct behaviour. Details: [docs/live-notes.md](docs/live-notes.md).
 
-Sample A's live search for HCLTech's own notice moved during 30 September, and the demo video
-is the take that found it; [If your live run differs](#the-three-demo-samples) has the whole
-account.
+## Quick start
 
-A score checker returns a number about the message; Offer Checkpost returns quoted, linked
-search results about each claim in it, and its best band is "No contradictions found", never a
-score.
-
-**Try it with no key, in two commands** (macOS or Linux, Python 3.11 or newer; Windows in
-[Setup, run, test](#setup-run-test)):
+Python 3.11 or newer (use `python3.13` or `python3.12` below if `python3` is older); macOS or
+Linux, no `make` needed:
 
 ```bash
-make setup    # virtualenv + hash-locked install
-make run      # prints http://127.0.0.1:8741/?token=…: open it, then "Try a sample"
+python3 -m venv .venv
+.venv/bin/pip install --require-hashes -r requirements.lock
+.venv/bin/pip install --no-deps -e .
+.venv/bin/python -m offer_checkpost serve
 ```
 
-With no `SERPAPI_KEY` it starts in replay mode, which serves SerpApi responses recorded with a
-real key on 29 and 30 September 2026. Replay answers the three demo samples (A, B and C, with
-**Run remaining checks** on A and C), `a-forwarded.txt` (Sample A again, at 0 searches) and the
-six samples that name no company; every other sample in `samples/offers/` needs a key
-([What replay answers](#run-it)). The whole test suite runs offline: 1713 tests pass (1 more is
-skipped because it spends a live search), among them the test in `tests/test_gate.py` that
-refuses each human-only verb to the agent and checks that it changed nothing.
+It prints `http://127.0.0.1:8741/?token=…`: open that address, then choose "Try a sample". The hash-locked install pulls only SerpApi's client.
+
+**No key needed: replay mode.** With no `SERPAPI_KEY` it serves SerpApi responses recorded
+with a real key on 29 and 30 September 2026. Where `make` works, `make setup && make run` is
+the shorter route; Windows and tests: [Setup, run, test](#setup-run-test). Replay answers the
+three demo samples and a few more; every other sample needs a key ([What replay
+answers](#run-it)). The whole test suite runs offline: 1713 tests pass (1 more is skipped
+because it spends a live search), among them the test in `tests/test_gate.py` that refuses each
+human-only verb to the agent and checks that it changed nothing.
+
+## For judges: where to look
+
+| Criterion | Where to look |
+|---|---|
+| **Idea strength** | The opening lines and [The problem](#the-problem): who runs it, why one check serves a batch, and why the two kinds of mistake cost different things. [What it can't check](#what-it-cant-check) says where the idea stops. |
+| **Originality** | [What's different here](#whats-different-here), each point with the file it lives in. |
+| **Technical complexity** | `src/offer_checkpost/planner.py`, whose docstring is the whole policy (order, reorder rules, stops, budget, quota guard, reuse, the trace's fields); `extract.py` (claims with source spans; ₹, K, LPA, lakh and `+91`; romanised Hinglish); `domains.py` (registrable domains, look-alikes); `salary.py` (listing pay to monthly, the median benchmark); `invoke.py` (the one path in); `server.py` (the session, the loopback guards); `mcp_server.py`. `tests/`: the rules and bands, one planner trace per demo sample (on synthetic fixtures, and replayed from the real recordings), HTTP over a real socket, the MCP adapter over its pipes, and the page in Chrome; `./verify.sh` runs them all. |
+| **Usefulness** | [How it works](#how-it-works), step 4: the recruiter reply, the 1930 summary, and the Offer Board's "Copy for WhatsApp" text. [Setup, run, test](#setup-run-test) has macOS, Linux and Windows commands; [Keys and privacy](#keys-and-privacy) says what leaves the machine. |
+| **Meaningful SerpApi usage** | [Where SerpApi comes in](#where-serpapi-comes-in): each engine, the fields read, the rules it can fire, and the India parameters. `src/offer_checkpost/checks.py` (one params builder and one reader per check), `providers.py` (live with a disk cache, replay, fake; the key kept out of every log and error), the Account API quota guard in `planner.py`, and `tests/test_checks.py`. |
 
 ## What's different here
 
-- **Built for the intermediary, so one check answers the batch.** The person who runs it gets
-  the same bulk-sent offer from many students. A forward that makes the same claims as a
-  message already checked (the same company, role, city, pay, fee and recruiter contacts, in
-  any spacing or case) is answered from that check at 0 searches while the app runs, and its
-  trace names the case it reused. The claims fingerprint is `fingerprint` in
-  `src/offer_checkpost/store.py`, the reuse is `_reuse` in `src/offer_checkpost/planner.py`,
-  and `samples/offers/a-forwarded.txt` is Sample A forwarded again.
+- **Built for the intermediary, so one check answers the batch.** A forward with the same
+  company, role, city, pay, fee and recruiter contacts as a message already checked (in any
+  spacing or case) is answered from that check at 0 searches while the app runs. The claims
+  fingerprint is `fingerprint` in `src/offer_checkpost/store.py`, the reuse is `_reuse` in
+  `src/offer_checkpost/planner.py`, and `samples/offers/a-forwarded.txt` is Sample A forwarded.
 - **The decisive evidence is the employer contradicting the message.** When the message asks
-  for a fee and Google names the employer's official domain (in its knowledge graph, or as the
-  top result), a `site:` search of that domain looks for the employer's own recruitment-fraud notice. A notice saying it charges
-  candidates nothing fires `fee_contradicts_employer`, a strong red signal quoted with its link
+  for a fee and Google names the employer's official domain, a `site:` search of that domain
+  looks for the employer's own recruitment-fraud notice. A notice saying it charges candidates
+  nothing fires `fee_contradicts_employer`, a strong red signal quoted with its link
   (`read_fraud_notice` in `src/offer_checkpost/checks.py`, the rule table in
-  `src/offer_checkpost/rules.py`).
-  The query is `site:<domain> (recruitment OR hiring) (fraud OR scam OR fake) never (fee OR
-  money OR payment)`. Each OR group stays in parentheses so `site:` scopes the whole query (a
-  probe with the top-level OR unparenthesised wandered off the domain), and `never` with a fee
-  word put an employer's own "we never ask for any payment" notice first in the 30 September
-  probes. Measured on 30 September 2026 on four employers, HCLTech, Infosys, TCS and Wipro, the
-  previous phrasing (`(fraud OR fake OR scam OR beware) (recruitment OR job OR offer OR
-  hiring)`) found no notice for any of them; this one, the best of five phrasings tried on those
-  same four, found HCLTech's and Wipro's fee statements and Infosys's notice, not TCS's. It was
-  chosen on the employers it was scored on, and no test isolates `never` as the cause. That is
-  one measurement on one day: results move with Google's ranking, so a notice found today may not be found
-  tomorrow, and an employer whose notice is not found stays unverified, never cleared. It
-  moved the same day for HCLTech; [If your live run differs](#the-three-demo-samples) has the
-  times, and the demo video is the take that quoted the notice.
-- **A search that comes back from other sites says nothing, and the app says so.** The saved
-  response of the 13:45 IST take held ten results and none was from hcltech.com: Google had
-  apparently dropped the `site:` restriction for such a narrow query and answered with generic
-  fraud pages. The app then reported "no recruitment-fraud notice on hcltech.com", a statement of
-  absence the search had not earned. Now a fraud-notice search with no result on the employer's
-  domain is **inconclusive** (`read_fraud_notice`: no signal, `inconclusive: true` in its
-  facts, and the trace, the evidence panel and the drafts say "no page from <domain>, so it
-  says nothing about a notice"). The planner then runs it **once more** with `wording:
-  "broad"`, `site:<domain> ("recruitment fraud" OR "fake job offers" OR "recruitment scams" OR
-  "fraudulent")`, the notice's usual titles, and says why in the trace: the first search returned no
-  page from the domain. The retry is a numbered search that counts against the case's budget of 6, and
-  a second inconclusive search stays inconclusive. A search that did return pages from the
-  domain but none that is a recruitment-fraud notice is a finding ("N pages from <domain>
-  came back, none is a recruitment-fraud notice") and is not retried. The retry is covered by fake-provider and browser tests; it has not yet
-  fired on a live response, and no replay shows it, since replay would then serve invented
-  SerpApi content. The broad wording itself was probed live, once, on the same morning: the broad wording returned ten results on the domain and a notice for HCLTech
-  and Infosys, and none for TCS and Wipro; Google's ranking moves between calls.
+  `src/offer_checkpost/rules.py`). The query is `site:<domain> (recruitment OR hiring) (fraud
+  OR scam OR fake) never (fee OR money OR payment)`. Its wording was chosen on four employers
+  on one day, and results move with Google's ranking: a notice found today may not be found
+  tomorrow, and an employer whose notice is not found stays unverified, never cleared
+  ([how it was chosen](docs/live-notes.md#how-the-notice-searchs-wording-was-chosen)).
+- **A search that comes back from other sites says nothing, and the app says so.** A
+  fraud-notice search with no result on the employer's domain is **inconclusive**, not "no
+  notice": the trace, the evidence panel and the drafts say "no page from <domain>, so it says
+  nothing about a notice". The planner runs it **once more** in a broader wording, as a numbered
+  search that counts against the case's budget of 6; a second inconclusive search stays
+  inconclusive. The retry is covered by fake-provider and browser tests; it has not yet fired
+  on a live response, and no replay shows it, since replay would then serve invented SerpApi
+  content ([the retry in detail](docs/live-notes.md#when-the-notice-search-says-nothing-the-retry)).
 - **Each search is chosen from what the earlier ones found.** The planner reorders and skips
-  checks by what the earlier searches found, tries a fraud-notice search that says nothing once
-  more, stops once the band is high risk and no search
+  checks by what the earlier searches found, stops once the band is high risk and no search
   left can change it, and its trace shows every search with its reason, every skip, and the
   searches saved. Every search sends a `json_restrictor`, so SerpApi returns only the fields
   its reader uses (`src/offer_checkpost/planner.py`, `RESTRICTORS` in
@@ -110,42 +102,34 @@ refuses each human-only verb to the agent and checks that it changed nothing.
   `consistent_with_genuine`), never "verified", "safe" or a 0-100 score. The board refuses a
   label the checks contradict: "No contradictions found" on any other band, and a red-flag
   label on that best band. On an unverified draft a person may still choose a red-flag label,
-  which is their call, and the post record stores the draft band (the card and the WhatsApp text
-  do not show it). A verdict posted for others is a person's click, and the post is a snapshot of
-  the claims and evidence they read, which nothing done to the case afterwards rewrites
-  (`label_misfit` and `post` in `src/offer_checkpost/drafts.py`, `publish_verdict` in
+  which is their call, and the post record stores the draft band (the card and the WhatsApp text do not show it). A verdict posted for others
+  is a person's click, on a snapshot of the claims and evidence they read (`label_misfit` and
+  `post` in `src/offer_checkpost/drafts.py`, `publish_verdict` in
   `src/offer_checkpost/verbs.py`).
 - **The agent can't act as the person through the app's tools, API or MCP adapter.** The
   agent's 17 tools (`src/offer_checkpost/tools.py`) and the person's four verbs
   (`src/offer_checkpost/verbs.py`) are separate lists, and `invoke`
-  (`src/offer_checkpost/invoke.py`) refuses the verbs to the agent. The person is the browser
-  that opened the address the app prints; a request can't claim to be them, and the MCP
-  adapter is always the agent ([Run it](#run-it); `tests/test_gate.py`,
-  `tests/test_server_http.py`, `tests/test_mcp.py`).
+  (`src/offer_checkpost/invoke.py`) refuses the verbs to the agent ([Run it](#run-it) says who
+  the person is; `tests/test_gate.py`, `tests/test_server_http.py`, `tests/test_mcp.py`).
 
 ### What it looks like
 
-Frames from the recorded demo, a live take on SerpApi on 30 September 2026 (16:00 IST), with
-no replay in it:
+Frames from the recorded demo (live SerpApi, 30 September 2026, 16:00 IST, no replay in it):
 
 ![Sample A's claims as chips, each highlighted in the pasted message, with the verdict Unverified before any search](docs/img/claims-with-source-spans.jpg)
 
-*Frame from the recorded demo: the claims extracted from the message, each highlighted where it
-came from, before any search.*
+*The claims extracted from the message, each highlighted where it came from, before any search.*
 
 ![Sample C's trace: two live searches, a reorder, and "4 searches were not spent"](docs/img/trace-searches-saved.jpg)
 
-*Frame from the recorded demo (live SerpApi): the planner's trace for Sample C, with the
-searches it saved.*
+*The planner's trace for Sample C, with the searches it saved.*
 
 ![A scripted MCP client's publish_verdict call refused, and the REFUSED row in the activity log](docs/img/mcp-publish-refused.jpg)
 
-*Frame from the recorded demo: an MCP client is the agent, so its `publish_verdict` call is
-refused, and the activity log records it.*
+*An MCP client is the agent: its `publish_verdict` call is refused and logged.*
 
-What the student receives is text like this, the "Copy for WhatsApp" of Sample A's post on the
-recorded responses (replay, 0 searches), published by a person as "Likely impersonation" with
-the note "Do not pay the fee.":
+What the student receives, the "Copy for WhatsApp" of Sample A's post on the recorded
+responses (replay), published by a person as "Likely impersonation":
 
 ```text
 *Offer check: Likely impersonation*
@@ -161,24 +145,11 @@ This describes this message, not the company named in it.
 Published 30 Sep 2026, 14:49 IST by a person, from web search results checked with Offer Checkpost.
 ```
 
-**Status.** The investigator, the local web app and its MCP adapter are built and tested. The
-demo video was filmed on live SerpApi on 30 September 2026 at 16:00 IST (10 searches, no
-replay in it). `python -m offer_checkpost serve` runs the app ([Run it](#run-it)),
-`python -m offer_checkpost mcp` serves its agent tools to an MCP client
-([Use it from an MCP client](#use-it-from-an-mcp-client)), and
-`python -m offer_checkpost investigate <file>` runs an offer through the same path from the
-command line; `samples/offers/` holds 21 fictional offers to try. With a key it searches live,
-and one search can take about a minute.
-
-## For judges: where to look
-
-| Criterion | Where to look |
-|---|---|
-| **Idea strength** | The opening lines and [The problem](#the-problem): who runs it, why one check serves a batch, and why the two kinds of mistake cost different things. [What it can't check](#what-it-cant-check) says where the idea stops. |
-| **Originality** | [What's different here](#whats-different-here), each point with the file it lives in. |
-| **Technical complexity** | `src/offer_checkpost/planner.py`, whose docstring is the whole policy (order, reorder rules, stops, budget, quota guard, reuse, the trace's fields); `extract.py` (claims with source spans; ₹, K, LPA, lakh and `+91`; romanised Hinglish); `domains.py` (registrable domains, look-alikes); `salary.py` (listing pay to monthly, the median benchmark); `invoke.py` (the one path in); `server.py` (the session, the loopback guards); `mcp_server.py`. `tests/`: the rules and bands, one planner trace per demo sample (on synthetic fixtures, and replayed from the real recordings), HTTP over a real socket, the MCP adapter over its pipes, and the page in Chrome; `./verify.sh` runs them all. |
-| **Usefulness** | [How it works](#how-it-works), step 4: the recruiter reply, the 1930 summary, and the Offer Board's "Copy for WhatsApp" text. [Setup, run, test](#setup-run-test) has macOS, Linux and Windows commands; [Keys and privacy](#keys-and-privacy) says what leaves the machine. |
-| **Meaningful SerpApi usage** | [Where SerpApi comes in](#where-serpapi-comes-in): each engine, the fields read, the rules it can fire, and the India parameters. `src/offer_checkpost/checks.py` (one params builder and one reader per check), `providers.py` (live with a disk cache, replay, fake; the key kept out of every log and error), the Account API quota guard in `planner.py`, and `tests/test_checks.py`. |
+**Status.** The investigator, the local web app and its MCP adapter are built and tested; the
+demo video was filmed on live SerpApi (10 searches, no replay in it). `python -m
+offer_checkpost investigate <file>` runs an offer from the command line, and `samples/offers/`
+holds 21 fictional offers. One live search can take
+about a minute.
 
 ## The problem
 
@@ -189,9 +160,8 @@ officer gets the same messages forwarded by students often, with the question "i
 real?", and students act on the answer. Scam messages are sent in bulk, so one answer serves a
 whole batch.
 
-Most of what such a message claims can be checked. The checks just take twenty minutes across
-five places, and you have to know what to look for. And the two ways of getting it wrong cost
-different things:
+Most of what such a message claims can be checked, but it takes twenty minutes across five
+places. And the two ways of getting it wrong cost different things:
 - **Calling a scam genuine** costs the candidate money and identity documents.
 - **Calling a real offer a scam** in front of a whole batch smears a real employer, and the
   students miss a real job.
@@ -206,9 +176,9 @@ contradictions found", and a verdict posted for others to read is always a perso
    it came from in the text. The claims are confirmed or corrected before anything is searched:
    by you in the page, or by the agent through `update_claims`. The page marks the claims the
    agent confirmed as the agent's, and the activity log shows the call.
-   Four rules read the text directly: money asked for, identity documents asked for early, an
-   interview held only in chat, and the paid-likes or "prepaid task" pattern. On their own they
-   leave the verdict at *unverified*, because the message alone proves nothing.
+   Four text rules (money asked for, identity documents asked early, an interview held only
+   in chat, the paid-likes or "prepaid task" pattern) leave the verdict at *unverified* on
+   their own: the message alone proves nothing.
 2. **Investigate.** A planner checks the claims against SerpApi and picks each next check from
    what the earlier searches found:
    - the company's domain is known and a fee was asked: it searches that domain for the
@@ -224,8 +194,7 @@ contradictions found", and a verdict posted for others to read is always a perso
    It stops as soon as the evidence is decisive. The trace shows every search, why it ran or
    was skipped, whether it came from the cache, and how many searches it saved. After a
    decisive stop, a person can click **Run remaining checks**; the agent never spends those
-   searches on its own. Investigating a case again checks it afresh: the earlier findings are
-   set aside, so no finding is ever counted twice.
+   searches on its own. Investigating again checks afresh, so no finding is counted twice.
 3. **Read the evidence.** Each finding is a named rule fired by a quoted search result with a
    link. The draft verdict is one of three bands: *high risk*, *unverified*, or "No
    contradictions found" (`consistent_with_genuine` in the tools and on the command line).
@@ -236,17 +205,13 @@ contradictions found", and a verdict posted for others to read is always a perso
    reaches students as "Copy for WhatsApp" text or as a downloaded HTML page.
 
    A post is the case exactly as the person read it: publishing is refused if anything changed
-   after they last looked (a correction, or a check the agent ran). When the agent changes a
-   case the page shows, the page says what it called and clears the chosen label, so the
-   person reads the case again before publishing it. The post keeps its own
-   copy of the claims and evidence, so nothing done to the case afterwards rewrites what
-   students were sent. A case on the board can't be corrected or checked again until a person
-   retracts its verdict. The label can't say more than the checks found: "No contradictions
-   found" only for that band, and a red-flag label never for it.
+   after they last looked (a correction, or a check the agent ran), and the page clears the
+   chosen label when the agent changes the case. The post keeps its own copy of the claims and
+   evidence, so nothing done to the case afterwards rewrites what students were sent. A case on
+   the board can't be corrected or checked again until a person retracts its verdict.
 
 **Who "the agent" is:** the automated investigator (the planner), an MCP client, or anything
-else that talks to the app without the person's session ([Run it](#run-it) says how a browser
-becomes the person). No LLM runs inside the app.
+else that talks to the app without the person's session. No LLM runs inside the app.
 
 ### Where SerpApi comes in
 
@@ -270,9 +235,7 @@ Every search goes through SerpApi's official Python client with a `json_restrict
 SerpApi returns only the fields its reader uses. Live results are cached locally for 24 hours.
 A check spends at most 6 searches by default and stops as soon as the evidence is decisive, so
 the free plan's 250 searches a month, less a 20-search reserve, covers at least 38 checks, and
-its 50 searches an hour at least 8. The same bulk-sent message forwarded again (the same
-company, role, city, pay, fee and recruiter contacts) is answered from the earlier check at 0
-searches.
+its 50 searches an hour at least 8. A forwarded copy of a checked message costs 0.
 
 ## What the agent does, what only the human does
 
@@ -318,192 +281,148 @@ unconfirmed claims, past the per-case search budget or the monthly quota reserve
 agent calls it, once the evidence is already decisive.
 
 Four verbs are **human only**: `publish_verdict` (posts a verdict, with its evidence, to the
-Offer Board, exactly as the person read the case), `retract_verdict` (removes a post and logs why), `record_outcome` (records the
-person's own decision) and `run_remaining_checks` (spends searches after a decisive result).
-They are **never registered as a tool**. The agent's tool list doesn't include them, and they
-refuse any caller but the human, even when called directly. A click in the page opened from
-the address the app prints counts as the human; the planner's own searches, and every other
-caller, count as the agent, and the activity log shows both. Who is calling comes from that
-session, never from the request: a request that says it is the person is refused, and logged
-as the agent's.
+Offer Board, exactly as the person read the case), `retract_verdict`, `record_outcome` and
+`run_remaining_checks`. They are **never registered as a tool**, and they refuse any caller but
+the human, even when called directly. Who is calling comes from the session, never from the
+request: a request that says it is the person is refused, and logged as the agent's.
 
 ## Stack
 
-- Python 3.13 for development, runs on 3.11+
-- [`serpapi`](https://pypi.org/project/serpapi/) 1.1.2, SerpApi's official Python client, as
-  the only runtime dependency
-- Standard-library HTTP server; plain HTML, CSS and JavaScript UI with no build step; a
-  standard-library MCP adapter over stdio (no MCP SDK)
-- pytest and ruff; Playwright (driving an installed Google Chrome) for the end-to-end tests and
-  the demo recording
-- Three search providers behind one interface: **live** (your SerpApi key, with a local
-  cache), **replay** (serves the demo samples' SerpApi responses, recorded with a real key on
-  29 and 30 September 2026, trimmed and labelled with their date, and needs no key), and **fake**
-  (synthetic data for the tests)
+Python 3.13 for development, runs on 3.11+. [`serpapi`](https://pypi.org/project/serpapi/)
+1.1.2, SerpApi's official Python client, is the only runtime dependency: the HTTP server, the
+plain HTML/CSS/JavaScript UI (no build step) and the stdio MCP adapter (no MCP SDK) are
+standard library. Dev only: pytest, ruff, and Playwright driving an installed Google Chrome for
+the end-to-end tests and the demo recording. Three search providers sit behind one interface:
+**live** (your key, with a local cache), **replay** (the recorded responses, no key) and
+**fake** (synthetic data for the tests).
 
 ## Setup, run, test
 
-It needs **Python 3.11 or newer**. `make setup` uses the first of `python3.13`, `python3.12`
-and `python3.11` on your PATH unless you name another interpreter: `make setup PY=/path/to/python`. The commands, on macOS
-or Linux:
+`make setup` uses the first of `python3.13`, `python3.12` and `python3.11` on your PATH, else
+`make setup PY=/path/to/python`; it adds pytest, ruff and Playwright. On macOS or Linux
+(`.env` takes your own `SERPAPI_KEY`, or stays empty for replay mode; `make run` prints the
+address to open, `make test` runs the whole suite offline, and `./verify.sh` runs everything
+here as one check):
 
 ```bash
-cp .env.example .env          # add your own SERPAPI_KEY, or leave it empty for replay mode
-make setup                    # virtualenv + hash-locked install (PY=python3.x for another 3.11+)
-make run                      # prints the address to open: http://127.0.0.1:8741/?token=…
-make test                     # the whole suite, offline
-make lint
-./verify.sh                   # everything above, as one check
-```
-
-Without `make` (macOS or Linux):
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install --require-hashes -r requirements-dev.lock
-.venv/bin/pip install --no-deps -e .
 cp .env.example .env
-.venv/bin/python -m offer_checkpost serve
-.venv/bin/python -m pytest
+make setup
+make run
+make test
+make lint
+./verify.sh
 ```
 
-On Windows:
+Without `make`, add the dev tools to the quick start's virtualenv and run the suite
+(`PY=python3.12 ./verify.sh` builds its virtualenv from another 3.11+ interpreter):
+
+```bash
+.venv/bin/pip install --require-hashes -r requirements-dev.lock && .venv/bin/python -m pytest
+```
+
+On Windows, the quick start's commands become:
 
 ```bat
 python -m venv .venv
-.venv\Scripts\pip install --require-hashes -r requirements-dev.lock
+.venv\Scripts\pip install --require-hashes -r requirements.lock
 .venv\Scripts\pip install --no-deps -e .
-copy .env.example .env
 .venv\Scripts\python -m offer_checkpost serve
-.venv\Scripts\python -m pytest
 ```
 
 ### Run it
 
 ```bash
-.venv/bin/python -m offer_checkpost serve                    # or: make run
-.venv/bin/python -m offer_checkpost serve --provider replay  # the recordings, even with a key
-.venv/bin/python -m offer_checkpost serve --port 8800        # or set PORT; 0 picks a free port
+.venv/bin/python -m offer_checkpost serve --provider replay
+.venv/bin/python -m offer_checkpost serve --port 8800
 ```
 
-On Windows:
-
-```bat
-.venv\Scripts\python -m offer_checkpost serve
-.venv\Scripts\python -m offer_checkpost serve --provider replay --port 8800
-```
-
-Run it in your own terminal. It prints the address to open, `http://127.0.0.1:8741/?token=…`
-(with the port you chose), and the provider serving searches, then runs until Ctrl-C. Open
-that address in your browser: it is what makes the browser the person. The address works once.
-When it is opened, the terminal prints the next one, which makes another browser (or a
-browser whose session ended) the person instead and signs the first one out. Cases and the
+`--provider replay` serves the recordings even with a key; `--port` (or `PORT`) sets the port,
+and 0 picks a free one. Run it in your own terminal. It prints the address to open, `http://127.0.0.1:8741/?token=…`
+(with the port you chose), and the provider serving searches, then runs until Ctrl-C. Opening
+that address makes the browser the person; it works once, and the terminal then prints the next
+one, which makes another browser the person instead and signs the first one out. Cases and the
 Offer Board are gone when the app stops, and the address changes each time it starts.
 
 - **Which searches it serves.** `--provider`, else `OFFER_CHECKPOST_PROVIDER`, else **live**
-  SerpApi when `SERPAPI_KEY` is set, else **replay**: the SerpApi responses recorded with a
-  real key on 29 and 30 September 2026, served with no key. Each setting is read from the
-  environment, else from `.env` in the directory you run it from, so a key kept in `.env` needs
-  no `export`. The page names the provider in its header, and in replay a banner says when the
-  responses were recorded and that they are not live. Live, the app waits up to 90 seconds
-  for each search: a `site:` search took over a minute on 29 September 2026, and SerpApi
-  counts a search even when the app stops waiting for it.
-- **What replay answers.** Replay works out of the box on the three demo samples, the page's
-  "Try a sample" menu (`samples/offers/a.txt`, `b.txt` and `c.txt`, with **Run remaining
-  checks** on Samples A and C), and on `a-forwarded.txt`, which makes Sample A's searches,
-  remaining checks included. The six samples that name no company search nothing, so they run
-  too, on their text rules. Every other sample in `samples/offers/` needs a key: replay has no
-  recording of its searches, so each one fails and says so, and nothing is made up. **fake**
-  serves the synthetic data the tests use, which answers only the synthetic stand-ins of the
-  demo samples in `tests/fixtures/offers/`: it shows the flow, not real search results.
+  SerpApi when `SERPAPI_KEY` is set, else **replay**. Each setting is read from the
+  environment, else from `.env` in the directory you run it from. The page names the provider
+  in its header, and in replay a banner says when the responses were recorded and that they are
+  not live. Live, the app waits up to 90 seconds for each search: a `site:` search took over a
+  minute on 29 September 2026, and SerpApi counts a search even when the app stops waiting.
+- **What replay answers.** The three demo samples in the page's "Try a sample" menu
+  (`samples/offers/a.txt`, `b.txt` and `c.txt`, with **Run remaining checks** on Samples A and
+  C), `a-forwarded.txt` (Sample A again: 0 searches after Sample A has been checked in the same run; on its own it makes A's searches), and the six samples that name no
+  company, which search nothing and run on their text rules. Every other sample in
+  `samples/offers/` needs a key: replay has no recording of its searches, so each one fails and
+  says so, and nothing is made up. **fake** serves the synthetic data the tests use: it shows
+  the flow, not real search results.
 - **Who is the person.** The browser that opens the address printed in the terminal, in the
   tab it opened it in. Opening the address uses up its token and starts a session with two
-  halves, and only a call carrying both is the person's (`human`):
-  - a cookie, `oc_session_<port>` (HttpOnly, SameSite=Strict), kept in the browser's cookie
-    store. Browsers don't scope cookies by port, so any other program listening on 127.0.0.1
-    that the browser visits receives it too. That is why the cookie alone is never the person;
-  - a key the page sends in a request header. It reaches the page in the address's fragment,
-    which no request carries, and the page keeps it in the tab's sessionStorage, which only
-    this origin (scheme, host and port) can read. Another site's page, or one on another
-    port, can't send that header without a permission this server never grants.
+  halves, and only a call carrying both is the person's (`human`): a cookie,
+  `oc_session_<port>` (HttpOnly, SameSite=Strict; browsers don't scope cookies by port, so
+  another program on 127.0.0.1 that the browser visits receives it too, which is why the
+  cookie alone is never the person), and a key the page sends in a request header. The key
+  reaches the page in the address's fragment, which no request carries, and lives in the tab's
+  sessionStorage, which only this origin can read; another site's page, or one on another
+  port, can't send that header without a permission this server never grants. The used
+  address, which the browser's history and the terminal keep, opens nothing.
 
-  The used address, which the browser's history and the terminal keep, opens nothing. Every
-  other call to the running app is the agent's (`agent`): an MCP client, a local script, a
-  browser or tab that was never given the address, or a page whose session ended (the app
-  restarted, or the address was opened elsewhere), which says so and turns off the human-only
-  buttons until the newest address is opened. A request can't choose: one whose body names
-  another `actor` is refused, and logged as whoever its session makes it.
-  `investigate` never talks to the running app: it works on its own copy in its own process,
-  `--as agent` makes its calls the agent's, and it publishes nothing either way. `mcp` talks to
-  the running app, always as the agent.
+  Every other call to the running app is the agent's (`agent`): an MCP client, a local script,
+  a browser or tab that was never given the address, or a page whose session ended, which says
+  so and turns off the human-only buttons until the newest address is opened. A request can't
+  choose: one whose body names another `actor` is refused, and logged as whoever its session
+  makes it. `investigate` never talks to the running app: it works on its own copy in its own
+  process, `--as agent` makes its calls the agent's, and it publishes nothing either way.
+  `mcp` talks to the running app, always as the agent.
 - **What that gate is for.** It holds against the agent's own ways in: its tool list, the
   API and the MCP adapter. It is not a defence against a program that runs as you on your
-  machine. Whatever starts `serve` or reads its terminal sees the address, so start it
-  yourself, never through an agent's shell tool. A program that can read your browser's cookie
-  store can act as you, here as in any other app you are signed in to.
+  machine: whatever starts `serve` or reads its terminal sees the address, so start it
+  yourself, never through an agent's shell tool, and a program that can read your browser's
+  cookie store can act as you, as in any other app you are signed in to.
 - **Only this machine.** Everything the app holds can be read without the session, so the
-  server listens on `127.0.0.1` and refuses to start on any other address. A web page open in
-  the same browser can still send requests to `127.0.0.1`, so the server also refuses a
-  request addressed to any other host name, one sent from another site's page, and a call that
-  isn't sent as JSON, which another site's page can't send without first asking the browser for
-  a permission this server never grants.
+  server listens on `127.0.0.1` and refuses to start on any other
+  address. It also refuses a request addressed to any other host name, one sent from another
+  site's page, and a call that isn't sent as JSON.
 
-To watch the planner work on a demo sample with no key, on the recorded responses:
+To watch the planner work on a demo sample (`a.txt`, `b.txt` or `c.txt`) with no key, on the
+recorded responses:
 
 ```bash
-.venv/bin/python -m offer_checkpost investigate samples/offers/a.txt   # also b.txt, c.txt
+.venv/bin/python -m offer_checkpost investigate samples/offers/a.txt
 ```
 
-With a key set, it searches live; add `--provider replay` to replay the recordings anyway.
+With a key set, it searches live; add `--provider replay` to replay the recordings anyway. It
+prints every search with why it ran or was skipped, the band, the searches spent and saved,
+the draft verdict and the activity log. Nothing is published from the command line.
 
-It prints every search with why it ran or was skipped, the band, the searches spent and saved,
-the draft verdict and the activity log. `--as agent` makes every call the agent's. Nothing is
-published from the command line: publishing is a person's click in the app.
-
-`./verify.sh` checks this README, the licence, the ignore rules for secrets and the sample
-environment file, then runs lint and the tests (`PY=python3.12 ./verify.sh` builds its
-virtualenv from another 3.11+ interpreter). The end-to-end tests drive the page itself in Google
-Chrome through Playwright (the session address and its single use, what a program on another
-port gets from the browser, paste, confirm, investigate, publish, corrections, the call-log
-strip, the replay banner, the agent's calls showing up while you type, a label chosen before
-the agent changed the case, claims the agent confirmed, a session that ended); where Chrome
-isn't installed they are skipped with the reason, and no browser is ever downloaded.
+`./verify.sh` checks the licence, the ignore rules for secrets and the sample environment
+file, then runs lint and the tests. The end-to-end tests drive the page in Google Chrome
+through Playwright; where Chrome isn't installed they are skipped with the reason, and no
+browser is ever downloaded.
 
 ### The three demo samples
 
 The messages are fictional. What the searches found about them is real: SerpApi's responses,
-recorded with a real key on 29 and 30 September 2026, trimmed and scrubbed, are in `recordings/` with
-their own notice, and replay serves them with no key.
+recorded with a real key on 29 and 30 September 2026, trimmed and scrubbed, are in `recordings/`
+with their own notice, and replay serves them with no key.
 
 - **Sample A** (`samples/offers/a.txt`) impersonates **HCLTech**: a work-from-home data-entry
   "shortlist" at ₹38,000 a month, a ₹2,499 "refundable registration fee", and a recruiter on
   the look-alike `hcltech-careers.example`. HCLTech is the employer being impersonated, not the
   sender: the check finds hcltech.com and quotes HCLTech's own warning, from its own site, that
-  it never asks for any payment. High risk after 2 searches, with 4 saved. **Run
-  remaining checks** spends those 4: hcltech.com neither clears nor names the look-alike, no
-  such listing by HCLTech turns up, HCLTech is on Maps in Noida, and its reviews there,
-  filtered on "fee", come back empty. It stays high risk. That is what replay serves, from the
-  responses recorded on 30 September, with the query above. A live search is not the same
-  twice: on 30 September, the query this project used until then (`(fraud OR fake OR scam OR
-  beware) (recruitment OR job OR offer OR hiring)`) returned no HCLTech notice, so nothing
-  was decisive, all 6 searches were spent and the case stayed unverified, as the video filmed
-  on 29 September showed. With the new query, live on 30 September at 13:45 IST, the search
-  quoted no HCLTech notice: its response held no page from hcltech.com at all, so it was
-  inconclusive, not a finding that HCLTech has no notice (see [What's different
-  here](#whats-different-here)). At 15:22 IST it returned ten pages from hcltech.com, none a
-  recruitment page, and the case ran out its 6 searches unverified. At 15:50 and 16:00 it
-  quoted the notice: the demo video, shot at 16:00 IST, stops decisive at 2 searches, High
-  risk, 4 not spent, as replay does. The same offer forwarded again is answered from that
-  check at 0 searches, which the video shows too.
+  it never asks for any payment. High risk after 2 searches, with 4 saved. **Run remaining
+  checks** spends those 4: hcltech.com neither clears nor names the look-alike, no such listing
+  by HCLTech turns up, HCLTech is on Maps in Noida, and its reviews there, filtered on "fee",
+  come back empty. It stays high risk. That is what replay serves and what the demo video's
+  live run found. A live search is not the same twice: other runs that day quoted no notice and
+  ended Unverified ([the takes](docs/live-notes.md#sample-as-notice-search-take-by-take)).
 - **Sample B** (`samples/offers/b.txt`) is a real opening at **Siemens**, an Application
   Support Engineer role in Bengaluru, open when it was recorded. The message links only to the
-  listing on Siemens's own careers site, and names no pay and no recruiter's name or address.
-  The link is on siemens.com and no fee is asked, so the fraud-notice search is skipped. The
-  checks find that listing and a Siemens office on Maps, and nothing that contradicts the
-  offer: "No contradictions found" after 4 searches. That is what replay serves and what the
-  demo video's take found at 16:01 IST. Live it can differ: at 15:53 IST Google Jobs returned
-  ten listings and none by Siemens for this role, so the case stayed Unverified (one red
-  signal, no matching listing, against the green office on Maps).
+  listing on Siemens's own careers site, and names no pay and no recruiter. The link is on
+  siemens.com and no fee is asked, so the fraud-notice search is skipped. The checks find that
+  listing and a Siemens office on Maps: "No contradictions found" after 4 searches, in replay
+  and in the demo video's take; live it can differ, and then stays Unverified
+  ([live notes](docs/live-notes.md)).
 - **Sample C** (`samples/offers/c.txt`) comes from an invented firm, Kavrellon Support
   Services, in Indore: customer support for freshers at ₹42,000 a month, a Telegram-only
   interview, and Aadhaar and bank photos asked for up front. No web footprint and no office on
@@ -511,54 +430,30 @@ their own notice, and replay serves them with no key.
   firm, and the offered pay is 2.4 times the median of the 6 of the 10 listings that show pay
   (₹17,292 a month).
 
-[`samples/offers/README.md`](samples/offers/README.md) says why these names were chosen.
-
-**If your live run differs.** Live results move day to day with Google's ranking, so a run
-today can differ from the recordings or the video.
-- The fraud-notice search moved during 30 September (the account is under Sample A above).
-  One case stays open: at 15:22 IST the query returned ten pages from hcltech.com, annual-report
-  and statutory-filing PDFs, none a recruitment page. The app reads that as "none is a
-  recruitment-fraud notice", does not retry it, and the case stays unverified after 6 searches;
-  a page from the domain that is not about recruitment is not treated as inconclusive yet.
-- An **Unverified** band after six searches is correct behaviour when no notice is quoted: an
-  employer whose notice is not found is never cleared, and nothing is made up. When the
-  notice search says nothing (no page from the employer's domain, in either wording), the trace
-  and the drafts say that, not "no notice".
-- `--provider replay` reproduces the recorded traces exactly: Sample A stops at 2 searches
-  with the notice quoted.
+[`samples/offers/README.md`](samples/offers/README.md) says why these names were chosen. An
+**Unverified** band after six searches is correct when no notice is quoted, and `--provider
+replay` reproduces the recorded traces exactly.
 
 ### Use it from an MCP client
 
 `python -m offer_checkpost mcp` serves the agent's tools to an MCP client over stdio
 (newline-delimited JSON-RPC; protocol versions 2025-11-25, 2025-06-18 and 2025-03-26; tools
-only). It is a client of the running app, not a second copy of it, so start the app first and
-open the address it prints, then register the adapter. Start the app yourself, in your own
-terminal, never through the MCP client's shell tool: whatever starts it reads the address that
-makes a browser the person. In Claude Code, from this directory:
+only). It is a client of the running app, not a second copy of it, so start the app first, in
+your own terminal (never through the MCP client's shell tool: whatever starts it reads the
+address that makes a browser the person), open the address it prints, then register the
+adapter. In Claude Code, from this directory:
 
 ```bash
 claude mcp add offer-checkpost -- "$PWD/.venv/bin/python" -m offer_checkpost mcp
 ```
 
-For a client that reads an `mcpServers` JSON file:
+For a client that reads an `mcpServers` JSON file, use `"command"`: the absolute path of the
+virtualenv's Python (`.venv\Scripts\python.exe` on Windows; a client may start the adapter
+from any directory) and `"args": ["-m", "offer_checkpost", "mcp"]` under
+`mcpServers.offer-checkpost`. The adapter asks the app at `http://127.0.0.1:8741`, or at the
+port `PORT` sets in the environment or in `.env`; for another port, add `"--url",
+"http://127.0.0.1:<port>"` to `args` (the bare address, never the one with the token).
 
-```json
-{
-  "mcpServers": {
-    "offer-checkpost": {
-      "command": "/absolute/path/to/offer-checkpost/.venv/bin/python",
-      "args": ["-m", "offer_checkpost", "mcp"]
-    }
-  }
-}
-```
-
-- **Which Python, which app.** Name the virtualenv's Python by its absolute path
-  (`.venv\Scripts\python.exe` on Windows): a client may start the adapter from any directory,
-  and that Python is the one the app is installed in. The adapter asks the app at
-  `http://127.0.0.1:8741`, or at the port `PORT` sets in the environment or in `.env` in the
-  directory it starts in. For another port, add `"--url", "http://127.0.0.1:<port>"` to `args`:
-  the bare address, never the one with the token.
 - **What the agent can do.** The 17 tools in [Tools](#tools): open a case, correct or confirm
   its claims, run the checks or `investigate`, draft the verdict, the recruiter reply and the
   1930 summary, and read cases and the search budget. Each call is one `POST /api/invoke`
@@ -570,41 +465,14 @@ For a client that reads an `mcpServers` JSON file:
   decisive result. Those four aren't in its tool list; a call to one comes back as a tool error
   carrying the app's refusal, and the refusal is in the activity log as the agent's. The
   adapter never names an actor, holds no session, keeps no state and uses no proxy.
-- **When the app isn't running**, a tool call says so: `Offer Checkpost is not running at
-  http://127.0.0.1:8741: start it with python -m offer_checkpost serve`.
-
-Its tests start it as a subprocess and drive it over its pipes with a scripted JSON-RPC client,
-against the real server.
+- **When the app isn't running**, a tool call says so and how to start it.
 
 ### Recording the demo video
 
-`demo/record_demo.py` records the app running on 127.0.0.1 in Google Chrome, headless, with
-Playwright, then renders the mp4 with ffmpeg and a narration spoken by macOS `say`:
-
-```bash
-make demo-record                         # live SerpApi (at most 18 searches), then out/offer-checkpost-demo.mp4
-make demo-record DEMO_PROVIDER=replay    # the recorded responses: no search spent
-make demo-render                         # the saved capture again, after a narration change: no search
-.venv/bin/python -m demo.record_demo capture --provider live --workdir out/demo-capture
-.venv/bin/python -m demo.record_demo capture --provider replay --part cutaway --workdir out/demo-capture/cutaway
-.venv/bin/python -m demo.record_demo render --workdir out/demo-capture --out out/offer-checkpost-demo.mp4
-```
-
-Each sentence of the narration starts when the page reaches what it says, so the capture is
-paced by the narration and the render lays each clip where the recorder cued it. A caption goes
-up at the moment of the on-screen change it describes and comes down when the page moves on.
-The recorder reads what sample A's live search found and the narration says it: the notice
-found by the first search (`decisive`), found by the retry after a first search that returned
-nothing from the domain (`retried`), or not found (`unverified`, `unverified_retried`). Only
-for a miss, the live take also records a short replay cutaway of sample A on the recorded
-responses, which hold the notice, that the render splices in under its own label, dated. Sample
-B's words follow what Google Jobs returned in the same way (`clean` or `unverified`). The render
-leaves out stretches where the screen did not change and nobody was speaking, and refuses a
-capture whose page didn't show what a beat's narration says. It also refuses narration
-rewritten since the capture that names text the capture never checked, unless
-`--allow-unchecked` (`make demo-render ALLOW_UNCHECKED=1`) says a person has looked at the
-footage; `render.json` lists those claims. [`docs/video-script.md`](docs/video-script.md) is
-the shot list.
+`demo/record_demo.py` records the app in Google Chrome with Playwright and renders the mp4 with
+ffmpeg and macOS `say` narration (`make demo-record`; `DEMO_PROVIDER=replay` spends no search).
+The narration follows what the live searches found ([how](docs/live-notes.md#what-the-recorder-does-with-a-live-take));
+[`docs/video-script.md`](docs/video-script.md) is the shot list.
 
 ## What it can't check
 
@@ -627,7 +495,9 @@ the shot list.
   official domain.
 - **An employer with no indexed recruitment-fraud notice.** Its notice search finds nothing to
   quote, so the case stays Unverified after up to 6 searches. That is the app being honest, not
-  a finding about the employer.
+  a finding about the employer. A search that returns pages from the domain but no notice is
+  not retried, so it can end that way even when a notice exists
+  ([live notes](docs/live-notes.md#the-third-failure-mode-open)).
 - **Search results change.** Replay mode shows responses recorded on a stated date, not today's.
 
 ## Keys and privacy
@@ -643,15 +513,13 @@ the shot list.
   server stops. The board is a single-machine log; "Copy for WhatsApp" and the downloaded page
   are how a verdict reaches anyone else. Live search results are cached on disk under
   `.cache/serpapi/` for 24 hours; the folder is git-ignored.
-- All sample offers are fictional messages. Their contacts use reserved `.example` domains and
-  masked phone numbers; the one real link, in Sample B, is a listing on the employer's own
-  careers site ([The three demo samples](#the-three-demo-samples)).
+- All sample offers are fictional. Their contacts use reserved `.example` domains and masked
+  phone numbers; the one real link, in Sample B, is on the employer's own careers site.
 - Responses recorded for replay mode are trimmed to the fields listed above before they are
   written: reviewer identities, personal profiles, anything on Facebook, Instagram or X, video
   results, and the news headlines the app never reads are removed, since those are where
-  people are named, and phone numbers and email addresses are masked. Once in the repository,
-  they are third-party search content, not covered by this repository's licence, and included
-  only for replay and tests.
+  people are named, and phone numbers and email addresses are masked. They are third-party
+  search content, not covered by this repository's licence, included only for replay and tests.
 
 ## License
 
